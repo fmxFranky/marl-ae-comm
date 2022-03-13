@@ -105,7 +105,7 @@ class Evaluator(mp.Process):
                         action, _, ent = self.net.take_action(plogit)
 
                     # record action entropy
-                    ents.append(ent)
+                    ents.append([e.item() for e in ent])
 
                     state, reward, done, info = env_copy.step(action)
                     state_var = ops.to_state_var(state)
