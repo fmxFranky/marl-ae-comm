@@ -27,8 +27,16 @@ class Master(object):
         gpu_id: gpu device id
     """
 
-    def __init__(self, net, opt, global_iter, global_done, master_lock,
-                 writer_dir, max_iteration=100):
+    def __init__(
+        self,
+        net,
+        opt,
+        global_iter,
+        global_done,
+        master_lock,
+        writer_dir,
+        max_iteration=100,
+    ):
         self.lock = master_lock
         self.iter = global_iter
         self.done = global_done
@@ -41,7 +49,7 @@ class Master(object):
     def init_tensorboard(self):
         """ initializes tensorboard by the first worker """
         with self.lock:
-            if not hasattr(self, 'writer'):
+            if not hasattr(self, "writer"):
                 self.writer = SummaryWriter(self.writer_dir)
         return
 
@@ -85,12 +93,18 @@ class Master(object):
             if self.iter.value % 100 == 0:
 
                 if progress_str is not None:
-                    print('[{}/{}] {}'.format(
-                        self.iter.value, self.max_iteration, progress_str))
+                    print(
+                        "[{}/{}] {}".format(
+                            self.iter.value, self.max_iteration, progress_str
+                        )
+                    )
 
                 else:
-                    print('[{}/{}] workers are working hard.'.format(
-                        self.iter.value, self.max_iteration))
+                    print(
+                        "[{}/{}] workers are working hard.".format(
+                            self.iter.value, self.max_iteration
+                        )
+                    )
 
             if self.iter.value > self.max_iteration:
                 self.done.value = 1
@@ -100,6 +114,11 @@ class Master(object):
         return self.done.value
 
     def save_ckpt(self, weight_iter, save_path):
-        torch.save({'net': self.net.state_dict(),
-                    'opt': self.opt.state_dict(),
-                    'iter': weight_iter}, save_path)
+        torch.save(
+            {
+                "net": self.net.state_dict(),
+                "opt": self.opt.state_dict(),
+                "iter": weight_iter,
+            },
+            save_path,
+        )

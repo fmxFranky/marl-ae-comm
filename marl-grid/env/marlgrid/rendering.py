@@ -18,12 +18,14 @@ class SimpleImageViewer(object):
                 scale = self.maxwidth / width
                 width = int(scale * width)
                 height = int(scale * height)
-            self.window = pyglet.window.Window(width=width,
-                                               height=height,
-                                               display=self.display,
-                                               vsync=False,
-                                               resizable=True,
-                                               caption=self.caption)
+            self.window = pyglet.window.Window(
+                width=width,
+                height=height,
+                display=self.display,
+                vsync=False,
+                resizable=True,
+                caption=self.caption,
+            )
             self.width = width
             self.height = height
             self.isopen = True
@@ -37,16 +39,12 @@ class SimpleImageViewer(object):
             def on_close():
                 self.isopen = False
 
-        assert len(arr.shape) == 3, 'Image with the wrong number shape'
+        assert len(arr.shape) == 3, "Image with the wrong number shape"
 
-        image = pyglet.image.ImageData(arr.shape[1],
-                                       arr.shape[0],
-                                       'RGB',
-                                       arr.tobytes(),
-                                       pitch=arr.shape[1] * -3)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D,
-                           gl.GL_TEXTURE_MAG_FILTER,
-                           gl.GL_NEAREST)
+        image = pyglet.image.ImageData(
+            arr.shape[1], arr.shape[0], "RGB", arr.tobytes(), pitch=arr.shape[1] * -3
+        )
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_NEAREST)
         texture = image.get_texture()
 
         aspect_ratio = arr.shape[1] / arr.shape[0]

@@ -26,33 +26,34 @@ class GridAgentInterface(GridAgent):
         sight = 2  # Can see the whole map
 
     def __init__(
-            self,
-            view_size=7,
-            view_tile_size=5,
-            view_offset=0,
-            observation_style='image',
-            observe_rewards=False,
-            observe_position=False,
-            observe_self_position=False,
-            observe_done=False,
-            observe_self_env_act=False,
-            observe_orientation=False,
-            observe_t=False,
-            restrict_actions=False,
-            see_through_walls=False,
-            hide_item_types=[],
-            prestige_beta=0.95,
-            prestige_scale=2,
-            allow_negative_prestige=False,
-            spawn_delay=0,
-            comm_dim=0,
-            comm_len=1,
-            discrete_comm=True,
-            n_agents=1,
-            is_adversary=False,
-            observe_identity=True,
-            skill=0,
-            **kwargs):
+        self,
+        view_size=7,
+        view_tile_size=5,
+        view_offset=0,
+        observation_style="image",
+        observe_rewards=False,
+        observe_position=False,
+        observe_self_position=False,
+        observe_done=False,
+        observe_self_env_act=False,
+        observe_orientation=False,
+        observe_t=False,
+        restrict_actions=False,
+        see_through_walls=False,
+        hide_item_types=[],
+        prestige_beta=0.95,
+        prestige_scale=2,
+        allow_negative_prestige=False,
+        spawn_delay=0,
+        comm_dim=0,
+        comm_len=1,
+        discrete_comm=True,
+        n_agents=1,
+        is_adversary=False,
+        observe_identity=True,
+        skill=0,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         self.view_size = view_size
@@ -92,21 +93,20 @@ class GridAgentInterface(GridAgent):
         if comm_dim > 0 and comm_len > 0:
             self.observe_comm = True
             if discrete_comm:
-                comm_space = [gym.spaces.MultiDiscrete([int(
-                    comm_dim) for _ in range(comm_len)]) for _ in range(
-                    n_agents)]
+                comm_space = [
+                    gym.spaces.MultiDiscrete([int(comm_dim) for _ in range(comm_len)])
+                    for _ in range(n_agents)
+                ]
                 comm_act_space = comm_space[0]
                 comm_space = gym.spaces.Tuple(comm_space)
                 self.comm = np.zeros((comm_len,))
             else:
-                comm_space = gym.spaces.Box(low=0.0,
-                                            high=comm_dim,
-                                            shape=(n_agents, comm_len),
-                                            dtype=np.float32)
-                comm_act_space = gym.spaces.Box(low=0.0,
-                                                high=comm_dim,
-                                                shape=(comm_len,),
-                                                dtype=np.float32)
+                comm_space = gym.spaces.Box(
+                    low=0.0, high=comm_dim, shape=(n_agents, comm_len), dtype=np.float32
+                )
+                comm_act_space = gym.spaces.Box(
+                    low=0.0, high=comm_dim, shape=(comm_len,), dtype=np.float32
+                )
                 self.comm = np.zeros((comm_len,), dtype=np.float32)
         else:
             self.observe_comm = False
@@ -118,59 +118,57 @@ class GridAgentInterface(GridAgent):
             low=0,
             high=255,
             shape=(view_tile_size * view_size, view_tile_size * view_size, 3),
-            dtype='uint8',
+            dtype="uint8",
         )
-        if observation_style == 'image':
+        if observation_style == "image":
             self.observation_space = image_space
-        elif observation_style == 'dict':
+        elif observation_style == "dict":
             obs_space = {
-                'pov': image_space,
+                "pov": image_space,
             }
             if self.observe_rewards:
-                obs_space['reward'] = gym.spaces.Box(low=-np.inf, high=np.inf,
-                                                     shape=(),
-                                                     dtype=np.float32)
+                obs_space["reward"] = gym.spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(), dtype=np.float32
+                )
             if self.observe_position:
                 # discrete position space is handled in base.py
-                obs_space['position'] = gym.spaces.Box(low=0, high=1,
-                                                       shape=(n_agents, 2),
-                                                       dtype=np.float32)
+                obs_space["position"] = gym.spaces.Box(
+                    low=0, high=1, shape=(n_agents, 2), dtype=np.float32
+                )
             if self.observe_self_position:
                 # discrete position space is handled in base.py
-                obs_space['selfpos'] = gym.spaces.Box(low=0, high=1,
-                                                      shape=(2,),
-                                                      dtype=np.float32)
+                obs_space["selfpos"] = gym.spaces.Box(
+                    low=0, high=1, shape=(2,), dtype=np.float32
+                )
             if self.observe_done:
-                obs_space['done'] = gym.spaces.Discrete(n=2)
+                obs_space["done"] = gym.spaces.Discrete(n=2)
             if self.observe_self_env_act:
-                obs_space['self_env_act'] = gym.spaces.Discrete(n=env_act_dim)
+                obs_space["self_env_act"] = gym.spaces.Discrete(n=env_act_dim)
             if self.observe_orientation:
-                obs_space['orientation'] = gym.spaces.Discrete(n=4)
+                obs_space["orientation"] = gym.spaces.Discrete(n=4)
             if self.observe_t:
-                obs_space['t'] = gym.spaces.Box(low=-np.inf, high=np.inf,
-                                                shape=(),
-                                                dtype=np.float32)
+                obs_space["t"] = gym.spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(), dtype=np.float32
+                )
             if self.observe_identity:
-                obs_space['identity'] = gym.spaces.Discrete(n=2)
+                obs_space["identity"] = gym.spaces.Discrete(n=2)
             if self.observe_comm:
-                obs_space['comm'] = comm_space
+                obs_space["comm"] = comm_space
             self.observation_space = gym.spaces.Dict(obs_space)
-        elif observation_style == 'tuple':
+        elif observation_style == "tuple":
             obs_space = [image_space]
             if self.observe_rewards:
-                obs_space += gym.spaces.Box(low=-np.inf, high=np.inf,
-                                            shape=(),
-                                            dtype=np.float32)
+                obs_space += gym.spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(), dtype=np.float32
+                )
             if self.observe_position:
                 # discrete position space is handled in base.py
-                obs_space += gym.spaces.Box(low=0, high=1,
-                                            shape=(n_agents, 2),
-                                            dtype=np.float32)
+                obs_space += gym.spaces.Box(
+                    low=0, high=1, shape=(n_agents, 2), dtype=np.float32
+                )
             if self.observe_self_position:
                 # discrete position space is handled in base.py
-                obs_space += gym.spaces.Box(low=0, high=1,
-                                            shape=(2,),
-                                            dtype=np.float32)
+                obs_space += gym.spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)
             if self.observe_done:
                 obs_space += gym.spaces.Discrete(n=2)
             if self.observe_self_env_act:
@@ -178,9 +176,9 @@ class GridAgentInterface(GridAgent):
             if self.observe_orientation:
                 obs_space += gym.spaces.Discrete(n=4)
             if self.observe_t:
-                obs_space += gym.spaces.Box(low=-np.inf, high=np.inf,
-                                            shape=(),
-                                            dtype=np.float32)
+                obs_space += gym.spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(), dtype=np.float32
+                )
             if self.observe_identity:
                 obs_space += gym.spaces.Discrete(n=2)
             if self.observe_comm:
@@ -189,19 +187,21 @@ class GridAgentInterface(GridAgent):
         else:
             raise ValueError(
                 f"{self.__class__.__name__} kwarg 'observation_style' must be "
-                f"one of 'image', 'dict', 'tuple'.")
+                f"one of 'image', 'dict', 'tuple'."
+            )
 
         if comm_dim > 0 and comm_len > 0:
             # include communication action space
             self.action_space = gym.spaces.Tuple(
-                [gym.spaces.Discrete(env_act_dim), comm_act_space])
+                [gym.spaces.Discrete(env_act_dim), comm_act_space]
+            )
         else:
             self.action_space = gym.spaces.Discrete(env_act_dim)
 
         self.metadata = {
             **self.metadata,
-            'view_size': view_size,
-            'view_tile_size': view_tile_size,
+            "view_size": view_size,
+            "view_tile_size": view_tile_size,
         }
         self.reset(new_episode=True)
 
@@ -235,7 +235,7 @@ class GridAgentInterface(GridAgent):
             is_adversary=self.is_adversary,
             observe_identity=self.observe_identity,
             skill=self.skill,
-            **self.init_kwargs
+            **self.init_kwargs,
         )
         return ret
 
@@ -269,7 +269,7 @@ class GridAgentInterface(GridAgent):
         self.active = False
         self.pos = None
         self.carrying = None
-        self.mission = ''
+        self.mission = ""
         if new_episode:
             self.prestige = 0
             self.bonus_state = None
@@ -364,7 +364,7 @@ class GridAgentInterface(GridAgent):
                 topX = self.pos[0] - self.view_size // 2
                 topY = self.pos[1] - self.view_size + 1 + self.view_offset
             else:
-                assert False, 'invalid agent direction'
+                assert False, "invalid agent direction"
 
         botX = topX + self.view_size
         botY = topY + self.view_size

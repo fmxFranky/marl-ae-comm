@@ -29,7 +29,7 @@ def dict_to_state_var(x, use_gpu=True, dtype=np.float32):
     for k, v in x.items():
         v = np.array(v, dtype=dtype)
         var = torch.from_numpy(v)
-        if k == 'pov':
+        if k == "pov":
             var = var.permute(2, 0, 1).unsqueeze(0)
         x[k] = var.cuda() if use_gpu else var
     return x
@@ -65,5 +65,5 @@ def norm_col_init(weights, std=1.0):
     Normalized column initializer
     """
     x = torch.randn(weights.size())
-    x *= std / torch.sqrt((x**2).sum(1, keepdim=True))
+    x *= std / torch.sqrt((x ** 2).sum(1, keepdim=True))
     return x

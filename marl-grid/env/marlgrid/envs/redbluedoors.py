@@ -11,10 +11,10 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
     obtain a reward.
     """
 
-    mission = 'open the red door then the blue door'
+    mission = "open the red door then the blue door"
 
     def __init__(self, config):
-        self.size = config.get('grid_size')
+        self.size = config.get("grid_size")
         width = self.size
         height = self.size
 
@@ -29,8 +29,8 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
         # Generate the grid walls
         self.grid.wall_rect(0, 0, width, height)
 
-        self.red_door = FreeDoor(color='red', state=FreeDoor.states.closed)
-        self.blue_door = FreeDoor(color='blue', state=FreeDoor.states.closed)
+        self.red_door = FreeDoor(color="red", state=FreeDoor.states.closed)
+        self.blue_door = FreeDoor(color="blue", state=FreeDoor.states.closed)
         doors = [self.red_door, self.blue_door]
         self.np_random.shuffle(doors)
 
@@ -51,30 +51,34 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
 
     def _door_pos_to_one_hot(self, pos):
         p = np.zeros((self.width + self.height,))
-        p[int(pos[0])] = 1.
-        p[int(self.width + pos[1])] = 1.
+        p[int(pos[0])] = 1.0
+        p[int(self.width + pos[1])] = 1.0
         return p
 
     def gen_global_obs(self):
         # concat door state and pos into a 1-D vector
-        door_state = np.array([int(self.red_door.is_open()),
-                               int(self.blue_door.is_open())])
-        door_obs = np.concatenate([
-            door_state,
-            self._door_pos_to_one_hot(self.red_door.pos),
-            self._door_pos_to_one_hot(self.blue_door.pos)])
+        door_state = np.array(
+            [int(self.red_door.is_open()), int(self.blue_door.is_open())]
+        )
+        door_obs = np.concatenate(
+            [
+                door_state,
+                self._door_pos_to_one_hot(self.red_door.pos),
+                self._door_pos_to_one_hot(self.blue_door.pos),
+            ]
+        )
         obs = {
-            'door_obs': door_obs,
-            'comm_act': np.stack([a.comm for a in self.agents],
-                                 axis=0),  # (N, comm_len)
-            'env_act': np.stack([a.env_act for a in self.agents],
-                                axis=0),  # (N, 1)
+            "door_obs": door_obs,
+            "comm_act": np.stack(
+                [a.comm for a in self.agents], axis=0
+            ),  # (N, comm_len)
+            "env_act": np.stack([a.env_act for a in self.agents], axis=0),  # (N, 1)
         }
         return obs
 
     def reset(self):
         obs_dict = MultiGridEnv.reset(self)
-        obs_dict['global'] = self.gen_global_obs()
+        obs_dict["global"] = self.gen_global_obs()
         return obs_dict
 
     def step(self, action_dict):
@@ -83,7 +87,7 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
 
         obs_dict, _, _, info_dict = MultiGridEnv.step(self, action_dict)
 
-        step_rewards = np.zeros((self.num_agents, ), dtype=np.float)
+        step_rewards = np.zeros((self.num_agents,), dtype=np.float)
 
         red_door_opened_after = self.red_door.is_open()
         blue_door_opened_after = self.blue_door.is_open()
@@ -107,19 +111,18 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
             if blue_door_opened_before:
                 done = True
 
-        timeout = (self.step_count >= self.max_steps)
+        timeout = self.step_count >= self.max_steps
 
-        obs_dict['global'] = self.gen_global_obs()
-        rew_dict = {f'agent_{i}': step_rewards[i] for i in range(
-            len(step_rewards))}
-        done_dict = {'__all__': done or timeout}
+        obs_dict["global"] = self.gen_global_obs()
+        rew_dict = {f"agent_{i}": step_rewards[i] for i in range(len(step_rewards))}
+        done_dict = {"__all__": done or timeout}
         info_dict = {
-            'done': done,
-            'timeout': timeout,
-            'success': success,
-            'comm': obs_dict['global']['comm_act'].tolist(),
-            'env_act': obs_dict['global']['env_act'].tolist(),
-            't': self.step_count,
-            'red_door_opened_now': red_door_opened_now,
+            "done": done,
+            "timeout": timeout,
+            "success": success,
+            "comm": obs_dict["global"]["comm_act"].tolist(),
+            "env_act": obs_dict["global"]["env_act"].tolist(),
+            "t": self.step_count,
+            "red_door_opened_now": red_door_opened_now,
         }
         return obs_dict, rew_dict, done_dict, info_dict

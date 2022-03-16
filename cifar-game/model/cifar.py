@@ -18,46 +18,56 @@ from model.simclr import SimCLR
 
 MODEL_DIR = os.path.dirname(__file__)
 MODEL_PATH = {
-    name: os.path.join(MODEL_DIR, f'../data/{name}_checkpoint_100.tar'
-                       ) for name in ['resnet18', 'resnet50']
+    name: os.path.join(MODEL_DIR, f"../data/{name}_checkpoint_100.tar")
+    for name in ["resnet18", "resnet50"]
 }
 
 
-def load_simclr_encoder(proj_dim=64, encoder_name='resnet18'):
+def load_simclr_encoder(proj_dim=64, encoder_name="resnet18"):
     # load pre-trained model from checkpoint
     simclr_model = SimCLR(encoder_name=encoder_name, projection_dim=proj_dim)
-    simclr_model.load_state_dict(torch.load(MODEL_PATH[encoder_name],
-                                            map_location='cpu'))
+    simclr_model.load_state_dict(
+        torch.load(MODEL_PATH[encoder_name], map_location="cpu")
+    )
     simclr_model.eval()
     return simclr_model.encoder, simclr_model.n_features
 
 
 class PtSimCLR(nn.Module):
-    def __init__(self, discrete_comm, comm_size=10, output_size=128,
-                 ae_fc_size=0, aux_loss='', use_mlp=True,
-                 encoder_name='resnet18'):
+    def __init__(
+        self,
+        discrete_comm,
+        comm_size=10,
+        output_size=128,
+        ae_fc_size=0,
+        aux_loss="",
+        use_mlp=True,
+        encoder_name="resnet18",
+    ):
         super(PtSimCLR, self).__init__()
         self.simclr_encoder, self.n_features = load_simclr_encoder(
-            encoder_name=encoder_name)
+            encoder_name=encoder_name
+        )
         self.discrete_comm = discrete_comm
         self.comm_size = comm_size
         self.output_size = output_size
         self.aux_loss = aux_loss
 
-        if 'a' in aux_loss:
+        if "a" in aux_loss:
             # ae_fc_size <= 0: AE SimCLR
             # ae_fc_size > 0: fc / mlp + AE SimCLR
-            self.ae = SimpleAE(self.n_features,
-                               discrete_comm,
-                               comm_size=comm_size,
-                               ae_fc_size=ae_fc_size,
-                               use_mlp=use_mlp)
+            self.ae = SimpleAE(
+                self.n_features,
+                discrete_comm,
+                comm_size=comm_size,
+                ae_fc_size=ae_fc_size,
+                use_mlp=use_mlp,
+            )
         else:
             # fc / mlp + SimCLR
-            self.enc = SimpleEncoder(self.n_features,
-                                     discrete_comm,
-                                     comm_size=comm_size,
-                                     use_mlp=use_mlp)
+            self.enc = SimpleEncoder(
+                self.n_features, discrete_comm, comm_size=comm_size, use_mlp=use_mlp
+            )
 
             # similar to SimCLR projector
             self.feat_fc = nn.Sequential(
@@ -67,7 +77,7 @@ class PtSimCLR(nn.Module):
             )
 
     def decode(self, x):
-        if 'a' in self.aux_loss and self.ae.ae_fc_size <= 0:
+        if "a" in self.aux_loss and self.ae.ae_fc_size <= 0:
             return self.ae.decoder(x).detach()
         else:
             return x
@@ -83,7 +93,7 @@ class PtSimCLR(nn.Module):
             h = self.simclr_encoder(x)
         h = h.detach()  # (2, n_features)
 
-        if 'a' in self.aux_loss:
+        if "a" in self.aux_loss:
             if self.ae.ae_fc_size > 0:
                 # fc / mlp + AE SimCLR
                 x_enc, z, loss = self.ae(h)
@@ -143,8 +153,9 @@ class SimpleConv(nn.Module):
 
 
 class SimpleEncoder(nn.Module):
-    def __init__(self, input_size, discrete_comm, hidden_size=128, comm_size=1,
-                 use_mlp=True):
+    def __init__(
+        self, input_size, discrete_comm, hidden_size=128, comm_size=1, use_mlp=True
+    ):
         super(SimpleEncoder, self).__init__()
 
         if use_mlp:
@@ -156,7 +167,7 @@ class SimpleEncoder(nn.Module):
                     nn.ReLU(),
                     nn.Linear(hidden_size // 2, comm_size),
                     nn.Sigmoid(),
-                    STE()
+                    STE(),
                 )
             else:
                 self.encoder = nn.Sequential(
@@ -165,19 +176,16 @@ class SimpleEncoder(nn.Module):
                     nn.Linear(hidden_size, hidden_size // 2),
                     nn.ReLU(),
                     nn.Linear(hidden_size // 2, comm_size),
-                    nn.Sigmoid()
+                    nn.Sigmoid(),
                 )
         else:
             if discrete_comm:
                 self.encoder = nn.Sequential(
-                    nn.Linear(input_size, comm_size),
-                    nn.Sigmoid(),
-                    STE()
+                    nn.Linear(input_size, comm_size), nn.Sigmoid(), STE()
                 )
             else:
                 self.encoder = nn.Sequential(
-                    nn.Linear(input_size, comm_size),
-                    nn.Sigmoid(),
+                    nn.Linear(input_size, comm_size), nn.Sigmoid(),
                 )
 
     def forward(self, x):
@@ -187,8 +195,15 @@ class SimpleEncoder(nn.Module):
 
 
 class SimpleAE(nn.Module):
-    def __init__(self, input_size, discrete_comm, hidden_size=128, comm_size=1,
-                 ae_fc_size=0, use_mlp=True):
+    def __init__(
+        self,
+        input_size,
+        discrete_comm,
+        hidden_size=128,
+        comm_size=1,
+        ae_fc_size=0,
+        use_mlp=True,
+    ):
         super(SimpleAE, self).__init__()
         self.ae_fc_size = ae_fc_size
 
@@ -208,12 +223,12 @@ class SimpleAE(nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_size, input_size),
             )
-            self.fc = SimpleFC(ae_fc_size, discrete_comm, comm_size,
-                               use_mlp)
+            self.fc = SimpleFC(ae_fc_size, discrete_comm, comm_size, use_mlp)
         else:
             # AE SimCLR
-            self.encoder = SimpleEncoder(input_size, discrete_comm, hidden_size,
-                                         comm_size, use_mlp=True)
+            self.encoder = SimpleEncoder(
+                input_size, discrete_comm, hidden_size, comm_size, use_mlp=True
+            )
             self.decoder = nn.Sequential(
                 nn.Linear(comm_size, hidden_size // 2),
                 nn.ReLU(),
@@ -266,10 +281,7 @@ class SimpleFC(nn.Module):
             self.base = nn.Linear(input_size, comm_size)
 
         if discrete_comm:
-            self.head = nn.Sequential(
-                nn.Sigmoid(),
-                STE()
-            )
+            self.head = nn.Sequential(nn.Sigmoid(), STE())
         else:
             self.head = nn.Sigmoid()
 
@@ -283,9 +295,20 @@ class CifarNet(A3CTemplate):
     A network with AE comm.
     """
 
-    def __init__(self, act_space, comm_type, comm_pg, aux_loss, img_feat_size,
-                 hidden_size=128, comm_size=1, ae_fc_size=0, use_mlp=False,
-                 debug=False, simclr_encoder_name='resnet18'):
+    def __init__(
+        self,
+        act_space,
+        comm_type,
+        comm_pg,
+        aux_loss,
+        img_feat_size,
+        hidden_size=128,
+        comm_size=1,
+        ae_fc_size=0,
+        use_mlp=False,
+        debug=False,
+        simclr_encoder_name="resnet18",
+    ):
         super().__init__()
         self.debug = debug
 
@@ -294,9 +317,9 @@ class CifarNet(A3CTemplate):
         self.comm_action_space = act_space[1]
 
         # check whether comm action is discrete or continuous
-        if self.comm_action_space.__class__.__name__ == 'MultiBinary':
+        if self.comm_action_space.__class__.__name__ == "MultiBinary":
             self.discrete_comm = True
-        elif self.comm_action_space.__class__.__name__ == 'Box':
+        elif self.comm_action_space.__class__.__name__ == "Box":
             self.discrete_comm = False
         else:
             raise NotImplementedError
@@ -306,14 +329,16 @@ class CifarNet(A3CTemplate):
         self.num_agents = 2
 
         if comm_type == 1:
-            self.net = PtSimCLR(discrete_comm=self.discrete_comm,
-                                comm_size=comm_size,
-                                output_size=img_feat_size,
-                                ae_fc_size=ae_fc_size,
-                                aux_loss=aux_loss,
-                                use_mlp=use_mlp,
-                                encoder_name=simclr_encoder_name)
-            if 'a' in aux_loss:
+            self.net = PtSimCLR(
+                discrete_comm=self.discrete_comm,
+                comm_size=comm_size,
+                output_size=img_feat_size,
+                ae_fc_size=ae_fc_size,
+                aux_loss=aux_loss,
+                use_mlp=use_mlp,
+                encoder_name=simclr_encoder_name,
+            )
+            if "a" in aux_loss:
                 if ae_fc_size > 0:
                     # additional fc on top of the autoencoded simclr rep
                     img_feat_size = ae_fc_size
@@ -331,38 +356,51 @@ class CifarNet(A3CTemplate):
         elif comm_type == 2:
             # img feats + comm obs + last self comm
             self.feat_dim = img_feat_size + comm_size * 2
-            self.comm_critic_linear = nn.ModuleList([nn.Linear(
-                hidden_size, 1) for _ in range(self.num_agents)])
+            self.comm_critic_linear = nn.ModuleList(
+                [nn.Linear(hidden_size, 1) for _ in range(self.num_agents)]
+            )
 
             if self.discrete_comm:
-                self.comm_actor_linear = nn.ModuleList([nn.Linear(
-                    hidden_size, 2 * comm_size
-                ) for _ in range(self.num_agents)])
+                self.comm_actor_linear = nn.ModuleList(
+                    [
+                        nn.Linear(hidden_size, 2 * comm_size)
+                        for _ in range(self.num_agents)
+                    ]
+                )
             else:
-                self.comm_actor_linear = nn.ModuleList([nn.Sequential(
-                    nn.Linear(hidden_size, comm_size),
-                    nn.Sigmoid()
-                ) for _ in range(self.num_agents)])
+                self.comm_actor_linear = nn.ModuleList(
+                    [
+                        nn.Sequential(nn.Linear(hidden_size, comm_size), nn.Sigmoid())
+                        for _ in range(self.num_agents)
+                    ]
+                )
         elif comm_type == 3:
             # img feats + comm obs + last self comm
             self.feat_dim = img_feat_size + comm_size * 2
-            self.comm_net = SimpleFC(img_feat_size,
-                                     discrete_comm=self.discrete_comm,
-                                     comm_size=comm_size,
-                                     use_mlp=use_mlp)
+            self.comm_net = SimpleFC(
+                img_feat_size,
+                discrete_comm=self.discrete_comm,
+                comm_size=comm_size,
+                use_mlp=use_mlp,
+            )
         else:
-            raise ValueError(f'comm_type {comm_type} not supported')
+            raise ValueError(f"comm_type {comm_type} not supported")
 
         self.head = nn.ModuleList(
-            [LSTMhead(self.feat_dim, hidden_size) for _ in range(
-                self.num_agents)])
+            [LSTMhead(self.feat_dim, hidden_size) for _ in range(self.num_agents)]
+        )
         self.is_recurrent = True
 
         # separate AC for env action and comm action
-        self.env_critic_linear = nn.ModuleList([nn.Linear(
-            hidden_size, 1) for _ in range(self.num_agents)])
-        self.env_actor_linear = nn.ModuleList([nn.Linear(
-            hidden_size, self.env_action_size) for _ in range(self.num_agents)])
+        self.env_critic_linear = nn.ModuleList(
+            [nn.Linear(hidden_size, 1) for _ in range(self.num_agents)]
+        )
+        self.env_actor_linear = nn.ModuleList(
+            [
+                nn.Linear(hidden_size, self.env_action_size)
+                for _ in range(self.num_agents)
+            ]
+        )
 
         self.comm_type = comm_type
         self.comm_pg = comm_pg
@@ -372,13 +410,11 @@ class CifarNet(A3CTemplate):
 
     def reset_parameters(self):
         for m in self.env_actor_linear:
-            m.weight.data = normalized_columns_initializer(
-                m.weight.data, 0.01)
+            m.weight.data = normalized_columns_initializer(m.weight.data, 0.01)
             m.bias.data.fill_(0)
 
         for m in self.env_critic_linear:
-            m.weight.data = normalized_columns_initializer(
-                m.weight.data, 1.0)
+            m.weight.data = normalized_columns_initializer(m.weight.data, 1.0)
             m.bias.data.fill_(0)
 
     def init_hidden(self):
@@ -389,8 +425,7 @@ class CifarNet(A3CTemplate):
             if self.comm_size == 1:
                 comm_act = int(comm_out[0].item())
             else:
-                comm_act = [int(comm_out[i].item()
-                                ) for i in range(len(comm_out))]
+                comm_act = [int(comm_out[i].item()) for i in range(len(comm_out))]
         else:
             if self.comm_size == 1:
                 comm_act = comm_out[0].item()
@@ -410,10 +445,10 @@ class CifarNet(A3CTemplate):
             for i in range(self.num_agents):
                 envl = env_logits[i]
                 comml = comm_logits[i]
-                env_act, env_act_logp, env_ent = take_action(
-                    envl, self.env_action_size)
+                env_act, env_act_logp, env_ent = take_action(envl, self.env_action_size)
                 comm_act, comm_act_logp, comm_ent = take_comm_action(
-                    comml, self.comm_action_space)
+                    comml, self.comm_action_space
+                )
 
                 act_list.append([env_act, comm_act])
                 act_logp_list.append([env_act_logp, comm_act_logp])
@@ -449,18 +484,18 @@ class CifarNet(A3CTemplate):
         # WARNING: the following code only works for Python 3.6 and beyond
 
         if self.debug:
-            print('[MODEL] aux loss', self.aux_loss)
+            print("[MODEL] aux loss", self.aux_loss)
 
         # (1) pre-process inputs
-        imgs = torch.stack([x['img'] for x in inputs], dim=0)  # (2, C, H, W)
+        imgs = torch.stack([x["img"] for x in inputs], dim=0)  # (2, C, H, W)
         if self.comm_type == 1:
             # in_feats - (2, img_feat_size)
             # comm - (2, comm_size)
             in_feats, comm, comm_loss = self.net(imgs)
 
             if self.debug:
-                print('[MODEL] img feats', in_feats.shape)
-                print(f'[MODEL] {self.aux_loss} comm loss', comm_loss)
+                print("[MODEL] img feats", in_feats.shape)
+                print(f"[MODEL] {self.aux_loss} comm loss", comm_loss)
         elif self.comm_type == 3:
             # fc / mlp on pixel
             in_feats = self.net(imgs)  # (2, img_feat_size)
@@ -468,7 +503,7 @@ class CifarNet(A3CTemplate):
             comm_loss = 0.0
 
             if self.debug:
-                print('[MODEL] img feats', in_feats.shape)
+                print("[MODEL] img feats", in_feats.shape)
         else:
             in_feats = self.net(imgs)  # (2, img_feat_size)
             comm_loss = 0.0
@@ -484,17 +519,16 @@ class CifarNet(A3CTemplate):
 
             if self.comm_type == 0:
                 # no comm
-                feats = in_feats[i:i + 1]
+                feats = in_feats[i : i + 1]
                 c = torch.zeros(1, 1)
                 comm_out.append(c)
                 x, hidden_state[i] = self.head[i](feats, hidden_state[i])
 
             elif self.comm_type == 2:
                 # rl comm
-                feats = torch.cat([in_feats[i],
-                                   inputs[i]['comm'],
-                                   inputs[i]['selfcomm']],
-                                  dim=-1).unsqueeze(0)
+                feats = torch.cat(
+                    [in_feats[i], inputs[i]["comm"], inputs[i]["selfcomm"]], dim=-1
+                ).unsqueeze(0)
                 x, hidden_state[i] = self.head[i](feats, hidden_state[i])
 
                 comm_actor_out[i] = self.comm_actor_linear[i](x)
@@ -503,37 +537,34 @@ class CifarNet(A3CTemplate):
             elif self.comm_type == 3:
                 comm_out.append(comm[i].detach())
                 if self.comm_pg:
-                    feats = torch.cat([in_feats[i],
-                                       inputs[i]['comm'],
-                                       comm[i]],
-                                      dim=-1).unsqueeze(0)
+                    feats = torch.cat(
+                        [in_feats[i], inputs[i]["comm"], comm[i]], dim=-1
+                    ).unsqueeze(0)
                 else:
-                    feats = torch.cat([in_feats[i],
-                                       inputs[i]['comm'],
-                                       comm_out[i]],  # detached comm
-                                      dim=-1).unsqueeze(0)
+                    feats = torch.cat(
+                        [in_feats[i], inputs[i]["comm"], comm_out[i]],  # detached comm
+                        dim=-1,
+                    ).unsqueeze(0)
                 x, hidden_state[i] = self.head[i](feats, hidden_state[i])
 
             else:
                 # non-rl comm
                 comm_out.append(comm[i].detach())
-                other_comm = self.net.decode(inputs[i]['comm'])
+                other_comm = self.net.decode(inputs[i]["comm"])
 
                 if self.comm_pg:
-                    feats = torch.cat([in_feats[i],
-                                       other_comm,
-                                       comm[i]],
-                                      dim=-1).unsqueeze(0)
+                    feats = torch.cat(
+                        [in_feats[i], other_comm, comm[i]], dim=-1
+                    ).unsqueeze(0)
                 else:
-                    feats = torch.cat([in_feats[i],
-                                       other_comm,
-                                       comm_out[i]],  # detached comm
-                                      dim=-1).unsqueeze(0)
+                    feats = torch.cat(
+                        [in_feats[i], other_comm, comm_out[i]], dim=-1  # detached comm
+                    ).unsqueeze(0)
                 x, hidden_state[i] = self.head[i](feats, hidden_state[i])
 
             if self.debug:
-                print('[MODEL] feats', feats.shape)
-                print('[MODEL] comm', comm.shape, comm[0])
+                print("[MODEL] feats", feats.shape)
+                print("[MODEL] comm", comm.shape, comm[0])
                 assert False
 
             # get env policy logits and predicted values
@@ -545,9 +576,12 @@ class CifarNet(A3CTemplate):
                 env_actor_out[i][0, env_mask_idx[i]] = -1e10
 
         if self.comm_type == 2:
-            return (env_actor_out, comm_actor_out), \
-                   (env_critic_out, comm_critic_out), \
-                   hidden_state, comm_out, comm_loss
+            return (
+                (env_actor_out, comm_actor_out),
+                (env_critic_out, comm_critic_out),
+                hidden_state,
+                comm_out,
+                comm_loss,
+            )
         else:
-            return env_actor_out, env_critic_out, hidden_state, comm_out, \
-                   comm_loss
+            return env_actor_out, env_critic_out, hidden_state, comm_out, comm_loss

@@ -26,5 +26,5 @@ def norm_col_init(weights, std=1.0):
     Normalized column initializer
     """
     x = torch.randn(weights.size())
-    x *= std / torch.sqrt((x**2).sum(1, keepdim=True))
+    x *= std / torch.sqrt((x ** 2).sum(1, keepdim=True))
     return x

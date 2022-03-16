@@ -40,9 +40,20 @@ class Worker(mp.Process):
         tau: gae hyperparameter.
     """
 
-    def __init__(self, master, net, env, worker_id, gpu_id=0, t_max=20,
-                 use_gae=True, gamma=0.99, tau=1.0, num_acts=1,
-                 anneal_comm_rew=False):
+    def __init__(
+        self,
+        master,
+        net,
+        env,
+        worker_id,
+        gpu_id=0,
+        t_max=20,
+        use_gae=True,
+        gamma=0.99,
+        tau=1.0,
+        num_acts=1,
+        anneal_comm_rew=False,
+    ):
         super().__init__()
 
         self.worker_id = worker_id
@@ -55,9 +66,8 @@ class Worker(mp.Process):
         self.tau = tau
         self.gpu_id = gpu_id
         self.reward_log = deque(maxlen=5)  # track last 5 finished rewards
-        self.pfmt = 'policy loss: {} value loss: {} ' + \
-                    'entropy loss: {} reward: {}'
-        self.agents = [f'agent_{i}' for i in range(self.env.num_agents)]
+        self.pfmt = "policy loss: {} value loss: {} " + "entropy loss: {} reward: {}"
+        self.agents = [f"agent_{i}" for i in range(self.env.num_agents)]
         self.num_acts = num_acts
         self.anneal_comm_rew = anneal_comm_rew
 
@@ -94,17 +104,16 @@ class Worker(mp.Process):
                     if i > 0:
                         if self.anneal_comm_rew:
                             for k, v in reward.items():
-                                reward[k] *= (weight_iter /
-                                              self.master.max_iteration)
+                                reward[k] *= weight_iter / self.master.max_iteration
 
                     action_by_id = {k: v[i] for k, v in action.items()}
-                    trajectory[i].append((plogit[i], action_by_id,
-                                          value[i], reward, act_info))
+                    trajectory[i].append(
+                        (plogit[i], action_by_id, value[i], reward, act_info)
+                    )
 
         # end condition
         if check_done(done):
-            target_value = [{k: 0 for k in self.agents} for _ in range(
-                self.num_acts)]
+            target_value = [{k: 0 for k in self.agents} for _ in range(self.num_acts)]
         else:
             with torch.no_grad():
                 target_value = self.net(state_var, hidden_state)[1]
@@ -112,15 +121,12 @@ class Worker(mp.Process):
                     target_value = [target_value]
 
         #  compute Loss: accumulate rewards and compute gradient
-        values = [{k: None for k in self.agents} for _ in range(
-            self.num_acts)]
+        values = [{k: None for k in self.agents} for _ in range(self.num_acts)]
         if self.use_gae:
             for k in self.agents:
                 for aid in range(self.num_acts):
-                    values[aid][k] = [x[k] for x in list(
-                        zip(*trajectory[aid]))[2]]
-                    values[aid][k].append(ops.to_torch(
-                        [target_value[aid][k]]))
+                    values[aid][k] = [x[k] for x in list(zip(*trajectory[aid]))[2]]
+                    values[aid][k].append(ops.to_torch([target_value[aid][k]]))
                     values[aid][k].reverse()
 
         return trajectory, values, target_value, done
@@ -129,7 +135,7 @@ class Worker(mp.Process):
     def run(self):
         self.master.init_tensorboard()
         done = True
-        reward_log = 0.
+        reward_log = 0.0
 
         while not self.master.is_done():
             # synchronize network parameters
@@ -148,11 +154,12 @@ class Worker(mp.Process):
                 done = False
 
                 self.reward_log.append(reward_log)
-                reward_log = 0.
+                reward_log = 0.0
 
             # extract trajectory
-            trajectory, values, target_value, done = \
-                self.get_trajectory(hidden_state, state_var, done, weight_iter)
+            trajectory, values, target_value, done = self.get_trajectory(
+                hidden_state, state_var, done, weight_iter
+            )
 
             all_pls = [[] for _ in range(self.num_acts)]
             all_vls = [[] for _ in range(self.num_acts)]
@@ -173,8 +180,9 @@ class Worker(mp.Process):
                     t_value = tar_val[agent]
 
                     pls, vls, els = [], [], []
-                    for i, (pi_logit, action, value, reward, act_info
-                            ) in enumerate(traj):
+                    for i, (pi_logit, action, value, reward, act_info) in enumerate(
+                        traj
+                    ):
 
                         # clip reward (optional)
                         if False:
@@ -186,22 +194,27 @@ class Worker(mp.Process):
 
                         if self.use_gae:
                             # Generalized advantage estimation (GAE)
-                            delta_t = reward[agent] + \
-                                      self.gamma * val[agent][i].data - \
-                                      val[agent][i + 1].data
+                            delta_t = (
+                                reward[agent]
+                                + self.gamma * val[agent][i].data
+                                - val[agent][i + 1].data
+                            )
                             gae = gae * self.gamma * self.tau + delta_t
                         else:
                             gae = False
 
                         if aid == 1:
                             tl, (pl, vl, el) = policy_gradient_loss(
-                                pi_logit[agent], action[agent],
-                                advantage, gae=gae,
-                                action_space=self.net.comm_action_space)
+                                pi_logit[agent],
+                                action[agent],
+                                advantage,
+                                gae=gae,
+                                action_space=self.net.comm_action_space,
+                            )
                         else:
                             tl, (pl, vl, el) = policy_gradient_loss(
-                                pi_logit[agent], action[agent],
-                                advantage, gae=gae)
+                                pi_logit[agent], action[agent], advantage, gae=gae
+                            )
 
                         pls.append(ops.to_numpy(pl))
                         vls.append(ops.to_numpy(vl))
@@ -220,17 +233,18 @@ class Worker(mp.Process):
             # log training info to tensorboard
             if self.worker_id == 0:
                 log_dict = {}
-                for act_id, act in enumerate(['env', 'comm'][:self.num_acts]):
+                for act_id, act in enumerate(["env", "comm"][: self.num_acts]):
                     for agent_id, agent in enumerate(self.agents):
-                        log_dict[f'{act}_policy_loss/{agent}'] = all_pls[
-                            act_id][agent_id]
-                        log_dict[f'{act}_value_loss/{agent}'] = all_vls[act_id][
-                            agent_id]
-                        log_dict[f'{act}_entropy/{agent}'] = all_els[act_id][
-                            agent_id]
-                    log_dict[f'policy_loss/{act}'] = np.mean(all_pls[act_id])
-                    log_dict[f'value_loss/{act}'] = np.mean(all_vls[act_id])
-                    log_dict[f'entropy/{act}'] = np.mean(all_els[act_id])
+                        log_dict[f"{act}_policy_loss/{agent}"] = all_pls[act_id][
+                            agent_id
+                        ]
+                        log_dict[f"{act}_value_loss/{agent}"] = all_vls[act_id][
+                            agent_id
+                        ]
+                        log_dict[f"{act}_entropy/{agent}"] = all_els[act_id][agent_id]
+                    log_dict[f"policy_loss/{act}"] = np.mean(all_pls[act_id])
+                    log_dict[f"value_loss/{act}"] = np.mean(all_vls[act_id])
+                    log_dict[f"entropy/{act}"] = np.mean(all_els[act_id])
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
@@ -240,11 +254,11 @@ class Worker(mp.Process):
                 np.around(np.mean(all_pls, axis=-1), decimals=5),
                 np.around(np.mean(all_vls, axis=-1), decimals=5),
                 np.around(np.mean(all_els, axis=-1), decimals=5),
-                np.around(np.mean(self.reward_log), decimals=2)
+                np.around(np.mean(self.reward_log), decimals=2),
             )
 
             self.master.apply_gradients(self.net, loss)
             self.master.increment(progress_str)
 
-        print(f'worker {self.worker_id} is done.')
+        print(f"worker {self.worker_id} is done.")
         return

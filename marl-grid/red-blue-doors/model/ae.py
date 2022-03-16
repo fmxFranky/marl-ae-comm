@@ -16,6 +16,7 @@ from model.model_utils import LSTMhead, ImgModule
 
 class STE(torch.autograd.Function):
     """Straight-Through Estimator"""
+
     @staticmethod
     def forward(ctx, x):
         return (x > 0.5).float()
@@ -33,6 +34,7 @@ class InputProcessor(nn.Module):
         - self_env_act
         - selfpos
     """
+
     def __init__(self, obs_space, comm_feat_len, num_agents, last_fc_dim=64):
         super(InputProcessor, self).__init__()
 
@@ -40,24 +42,23 @@ class InputProcessor(nn.Module):
         self.num_agents = num_agents
 
         # image processor
-        assert 'pov' in self.obs_keys
-        self.conv = ImgModule(obs_space['pov'].shape, last_fc_dim=last_fc_dim)
+        assert "pov" in self.obs_keys
+        self.conv = ImgModule(obs_space["pov"].shape, last_fc_dim=last_fc_dim)
         feat_dim = last_fc_dim
 
         # state inputs processor
         state_feat_dim = 0
 
-        if 'self_env_act' in self.obs_keys:
+        if "self_env_act" in self.obs_keys:
             # discrete value with one-hot encoding
-            self.env_act_dim = obs_space.spaces['self_env_act'].n
+            self.env_act_dim = obs_space.spaces["self_env_act"].n
             state_feat_dim += self.env_act_dim
 
-        if 'selfpos' in self.obs_keys:
+        if "selfpos" in self.obs_keys:
             self.discrete_positions = None
-            if obs_space.spaces['selfpos'].__class__.__name__ == \
-                    'MultiDiscrete':
+            if obs_space.spaces["selfpos"].__class__.__name__ == "MultiDiscrete":
                 # process position with one-hot encoder
-                self.discrete_positions = obs_space.spaces['selfpos'].nvec
+                self.discrete_positions = obs_space.spaces["selfpos"].nvec
                 state_feat_dim += sum(self.discrete_positions)
             else:
                 state_feat_dim += 2
@@ -83,10 +84,10 @@ class InputProcessor(nn.Module):
         # WARNING: the following code only works for Python 3.6 and beyond
 
         # process images together if provided
-        if 'pov' in self.obs_keys:
+        if "pov" in self.obs_keys:
             pov = []
             for i in range(self.num_agents):
-                pov.append(inputs[f'agent_{i}']['pov'])
+                pov.append(inputs[f"agent_{i}"]["pov"])
             x = torch.cat(pov, dim=0)
             x = self.conv(x)  # (N, img_feat_dim)
             xs = torch.chunk(x, self.num_agents)
@@ -107,21 +108,20 @@ class InputProcessor(nn.Module):
             feats = []
 
             # concat last env act if provided
-            if 'self_env_act' in self.obs_keys:
+            if "self_env_act" in self.obs_keys:
                 env_act = F.one_hot(
-                    inputs[f'agent_{i}']['self_env_act'].to(torch.int64),
-                    num_classes=self.env_act_dim)
+                    inputs[f"agent_{i}"]["self_env_act"].to(torch.int64),
+                    num_classes=self.env_act_dim,
+                )
                 env_act = torch.reshape(env_act, (1, self.env_act_dim))
                 feats.append(env_act)
 
             # concat agent's own position if provided
-            if 'selfpos' in self.obs_keys:
-                sp = inputs[f'agent_{i}']['selfpos'].to(torch.int64)  # (2,)
+            if "selfpos" in self.obs_keys:
+                sp = inputs[f"agent_{i}"]["selfpos"].to(torch.int64)  # (2,)
                 if self.discrete_positions is not None:
-                    spx = F.one_hot(sp[0],
-                                    num_classes=self.discrete_positions[0])
-                    spy = F.one_hot(sp[1],
-                                    num_classes=self.discrete_positions[1])
+                    spx = F.one_hot(sp[0], num_classes=self.discrete_positions[0])
+                    spy = F.one_hot(sp[1], num_classes=self.discrete_positions[1])
                     sp = torch.cat([spx, spy], dim=-1).float()
                     sp = torch.reshape(sp, (1, sum(self.discrete_positions)))
                 else:
@@ -133,7 +133,7 @@ class InputProcessor(nn.Module):
             elif len(feats) == 1:
                 feats = feats[0]
             else:
-                raise ValueError('?!?!?!', feats)
+                raise ValueError("?!?!?!", feats)
 
             feats = self.state_feat_fc(feats)
             feats = self.state_layer_norm(feats)
@@ -148,21 +148,26 @@ class InputProcessor(nn.Module):
 
 
 class EncoderDecoder(nn.Module):
-    def __init__(self, obs_space, comm_len, discrete_comm, num_agents,
-                 ae_type='', img_feat_dim=64):
+    def __init__(
+        self,
+        obs_space,
+        comm_len,
+        discrete_comm,
+        num_agents,
+        ae_type="",
+        img_feat_dim=64,
+    ):
         super(EncoderDecoder, self).__init__()
 
-        self.preprocessor = InputProcessor(obs_space, 0, num_agents,
-                                           last_fc_dim=img_feat_dim)
+        self.preprocessor = InputProcessor(
+            obs_space, 0, num_agents, last_fc_dim=img_feat_dim
+        )
         in_size = self.preprocessor.feat_dim
 
-        if ae_type == 'rfc':
+        if ae_type == "rfc":
             # random projection using fc
-            self.encoder = nn.Sequential(
-                nn.Linear(in_size, comm_len),
-                nn.Sigmoid(),
-            )
-        elif ae_type == 'rmlp':
+            self.encoder = nn.Sequential(nn.Linear(in_size, comm_len), nn.Sigmoid(),)
+        elif ae_type == "rmlp":
             # random projection using mlp
             self.encoder = nn.Sequential(
                 nn.Linear(in_size, 128),
@@ -172,9 +177,9 @@ class EncoderDecoder(nn.Module):
                 nn.Linear(64, 32),
                 nn.ReLU(),
                 nn.Linear(32, comm_len),
-                nn.Sigmoid()
+                nn.Sigmoid(),
             )
-        elif ae_type == 'fc':
+        elif ae_type == "fc":
             # fc on AE
             self.encoder = nn.Sequential(
                 nn.Linear(in_size, 128),
@@ -183,10 +188,7 @@ class EncoderDecoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(64, img_feat_dim),
             )
-            self.fc = nn.Sequential(
-                nn.Linear(img_feat_dim, comm_len),
-                nn.Sigmoid(),
-            )
+            self.fc = nn.Sequential(nn.Linear(img_feat_dim, comm_len), nn.Sigmoid(),)
             self.decoder = nn.Sequential(
                 nn.Linear(img_feat_dim, 64),
                 nn.ReLU(),
@@ -194,7 +196,7 @@ class EncoderDecoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(128, in_size),
             )
-        elif ae_type == 'mlp':
+        elif ae_type == "mlp":
             # mlp on AE
             self.encoder = nn.Sequential(
                 nn.Linear(in_size, 128),
@@ -218,7 +220,7 @@ class EncoderDecoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(128, in_size),
             )
-        elif ae_type == '':
+        elif ae_type == "":
             # AE
             self.encoder = nn.Sequential(
                 nn.Linear(in_size, 128),
@@ -228,7 +230,7 @@ class EncoderDecoder(nn.Module):
                 nn.Linear(64, 32),
                 nn.ReLU(),
                 nn.Linear(32, comm_len),
-                nn.Sigmoid()
+                nn.Sigmoid(),
             )
             self.decoder = nn.Sequential(
                 nn.Linear(comm_len, 32),
@@ -259,13 +261,13 @@ class EncoderDecoder(nn.Module):
     def forward(self, feat):
         encoded = self.encoder(feat)
 
-        if self.ae_type in {'rfc', 'rmlp'}:
+        if self.ae_type in {"rfc", "rmlp"}:
             # do not detach since there's no reconstruction loss
             if self.discrete_comm:
                 encoded = STE.apply(encoded)
             return encoded, torch.tensor(0.0)
 
-        elif self.ae_type in {'fc', 'mlp'}:
+        elif self.ae_type in {"fc", "mlp"}:
             # get intermediate reconstruction loss
             decoded = self.decoder(encoded)
             loss = F.mse_loss(decoded, feat)
@@ -276,7 +278,7 @@ class EncoderDecoder(nn.Module):
                 comm = STE.apply(comm)
             return comm, loss
 
-        elif self.ae_type == '':
+        elif self.ae_type == "":
             if self.discrete_comm:
                 encoded = STE.apply(encoded)
             decoded = self.decoder(encoded)
@@ -291,9 +293,19 @@ class AENetwork(A3CTemplate):
     """
     An network with AE comm.
     """
-    def __init__(self, obs_space, act_space, num_agents, comm_len,
-                 discrete_comm, ae_pg=0, ae_type='', hidden_size=256,
-                 img_feat_dim=64):
+
+    def __init__(
+        self,
+        obs_space,
+        act_space,
+        num_agents,
+        comm_len,
+        discrete_comm,
+        ae_pg=0,
+        ae_type="",
+        hidden_size=256,
+        img_feat_dim=64,
+    ):
         super().__init__()
 
         # assume action space is a Tuple of 2 spaces
@@ -303,50 +315,54 @@ class AENetwork(A3CTemplate):
 
         self.num_agents = num_agents
 
-        self.comm_ae = EncoderDecoder(obs_space, comm_len, discrete_comm,
-                                      num_agents, ae_type=ae_type,
-                                      img_feat_dim=img_feat_dim)
+        self.comm_ae = EncoderDecoder(
+            obs_space,
+            comm_len,
+            discrete_comm,
+            num_agents,
+            ae_type=ae_type,
+            img_feat_dim=img_feat_dim,
+        )
 
         feat_dim = self.comm_ae.preprocessor.feat_dim
 
-        if ae_type == '':
+        if ae_type == "":
             self.input_processor = InputProcessor(
-                obs_space,
-                feat_dim,
-                num_agents,
-                last_fc_dim=img_feat_dim)
+                obs_space, feat_dim, num_agents, last_fc_dim=img_feat_dim
+            )
         else:
             self.input_processor = InputProcessor(
-                obs_space,
-                comm_len,
-                num_agents,
-                last_fc_dim=img_feat_dim)
+                obs_space, comm_len, num_agents, last_fc_dim=img_feat_dim
+            )
 
         # individual memories
         self.feat_dim = self.input_processor.feat_dim + comm_len
         self.head = nn.ModuleList(
-            [LSTMhead(self.feat_dim, hidden_size, num_layers=1
-                      ) for _ in range(num_agents)])
+            [
+                LSTMhead(self.feat_dim, hidden_size, num_layers=1)
+                for _ in range(num_agents)
+            ]
+        )
         self.is_recurrent = True
 
         # separate AC for env action and comm action
-        self.env_critic_linear = nn.ModuleList([nn.Linear(
-            hidden_size, 1) for _ in range(num_agents)])
-        self.env_actor_linear = nn.ModuleList([nn.Linear(
-            hidden_size, self.env_action_size) for _ in range(num_agents)])
+        self.env_critic_linear = nn.ModuleList(
+            [nn.Linear(hidden_size, 1) for _ in range(num_agents)]
+        )
+        self.env_actor_linear = nn.ModuleList(
+            [nn.Linear(hidden_size, self.env_action_size) for _ in range(num_agents)]
+        )
 
         self.reset_parameters()
         return
 
     def reset_parameters(self):
         for m in self.env_actor_linear:
-            m.weight.data = normalized_columns_initializer(
-                m.weight.data, 0.01)
+            m.weight.data = normalized_columns_initializer(m.weight.data, 0.01)
             m.bias.data.fill_(0)
 
         for m in self.env_critic_linear:
-            m.weight.data = normalized_columns_initializer(
-                m.weight.data, 1.0)
+            m.weight.data = normalized_columns_initializer(m.weight.data, 1.0)
             m.bias.data.fill_(0)
         return
 
@@ -378,7 +394,7 @@ class AENetwork(A3CTemplate):
         # (1) pre-process inputs
         comm_feat = []
         for i in range(self.num_agents):
-            cf = self.comm_ae.decode(inputs[f'agent_{i}']['comm'][:-1])
+            cf = self.comm_ae.decode(inputs[f"agent_{i}"]["comm"][:-1])
             if not self.ae_pg:
                 cf = cf.detach()
             comm_feat.append(cf)
@@ -395,11 +411,10 @@ class AENetwork(A3CTemplate):
         env_actor_out, env_critic_out = {}, {}
 
         for i, agent_name in enumerate(inputs.keys()):
-            if agent_name == 'global':
+            if agent_name == "global":
                 continue
 
-            cat_feat[i] = torch.cat([cat_feat[i], comm_out[i].unsqueeze(0)],
-                                    dim=-1)
+            cat_feat[i] = torch.cat([cat_feat[i], comm_out[i].unsqueeze(0)], dim=-1)
 
             x, hidden_state[i] = self.head[i](cat_feat[i], hidden_state[i])
 
@@ -410,5 +425,10 @@ class AENetwork(A3CTemplate):
             if env_mask_idx and env_mask_idx[i]:
                 env_actor_out[agent_name][0, env_mask_idx[i]] = -1e10
 
-        return env_actor_out, env_critic_out, hidden_state, \
-               comm_out.detach(), comm_ae_loss
+        return (
+            env_actor_out,
+            env_critic_out,
+            hidden_state,
+            comm_out.detach(),
+            comm_ae_loss,
+        )

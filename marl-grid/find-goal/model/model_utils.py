@@ -31,12 +31,13 @@ class LSTMhead(nn.Module):
 
     def init_hidden(self):
         """ initializes zero state (2 x num_layers x 1 x feat_dim) """
-        assert self.is_recurrent, 'model is not recurrent'
+        assert self.is_recurrent, "model is not recurrent"
         return (torch.zeros(1, 1, 256).cuda(), torch.zeros(1, 1, 256).cuda())
 
 
 class ImgModule(nn.Module):
     """Process image inputs of shape CxHxW."""
+
     def __init__(self, input_size, last_fc_dim=0):
         super(ImgModule, self).__init__()
         self.conv1 = self.make_layer(input_size[2], 32)
@@ -73,18 +74,25 @@ class ImgModule(nn.Module):
 class CommModule(nn.Module):
     """Process discrete / continuous binary messages of shape
     (B, num_agents, comm_len)."""
-    def __init__(self, comm_size, comm_len, discrete_comm, hidden_size,
-                 emb_size, comm_rnn):
+
+    def __init__(
+        self, comm_size, comm_len, discrete_comm, hidden_size, emb_size, comm_rnn
+    ):
         super(CommModule, self).__init__()
         assert comm_size == 2
 
         if discrete_comm:
             self.emb = nn.Embedding(comm_size, emb_size)
-            self.emb_fc = nn.Sequential(nn.Linear(emb_size, 32), nn.ReLU(),
-                                        nn.Linear(32, 32), nn.ReLU())
+            self.emb_fc = nn.Sequential(
+                nn.Linear(emb_size, 32), nn.ReLU(), nn.Linear(32, 32), nn.ReLU()
+            )
         else:
-            self.fc = nn.Sequential(nn.Linear(comm_len, emb_size), nn.ReLU(),
-                                    nn.Linear(emb_size, 32), nn.ReLU())
+            self.fc = nn.Sequential(
+                nn.Linear(comm_len, emb_size),
+                nn.ReLU(),
+                nn.Linear(emb_size, 32),
+                nn.ReLU(),
+            )
 
         if comm_rnn:
             self.rnn = nn.GRU(32, hidden_size, batch_first=True)
@@ -124,9 +132,20 @@ class InputProcessingModule(nn.Module):
         - position
         - done
     """
-    def __init__(self, obs_space, comm_size, comm_len, discrete_comm, emb_size,
-                 num_agents, num_blind_agents, layer_norm, comm_rnn=True,
-                 num_adversaries=0):
+
+    def __init__(
+        self,
+        obs_space,
+        comm_size,
+        comm_len,
+        discrete_comm,
+        emb_size,
+        num_agents,
+        num_blind_agents,
+        layer_norm,
+        comm_rnn=True,
+        num_adversaries=0,
+    ):
         super(InputProcessingModule, self).__init__()
 
         self.obs_keys = list(obs_space.spaces.keys())
@@ -136,8 +155,8 @@ class InputProcessingModule(nn.Module):
         self.num_adversaries = num_adversaries
 
         # image processor
-        if 'pov' in self.obs_keys:
-            self.conv = ImgModule(obs_space['pov'].shape)
+        if "pov" in self.obs_keys:
+            self.conv = ImgModule(obs_space["pov"].shape)
             feat_dim = 32 * 3 * 3
         else:
             feat_dim = 0
@@ -146,28 +165,28 @@ class InputProcessingModule(nn.Module):
         state_feat_dim = 0
 
         # global / private states
-        if 't' in self.obs_keys:
+        if "t" in self.obs_keys:
             state_feat_dim += 1
 
-        if 'self_env_act' in self.obs_keys:
+        if "self_env_act" in self.obs_keys:
             # discrete value with one-hot encoding
-            self.env_act_dim = obs_space.spaces['self_env_act'].n
+            self.env_act_dim = obs_space.spaces["self_env_act"].n
             state_feat_dim += self.env_act_dim
 
-        if 'selfpos' in self.obs_keys:
+        if "selfpos" in self.obs_keys:
             self.discrete_positions = None
-            if obs_space.spaces['selfpos'].__class__.__name__ == \
-                    'MultiDiscrete':
+            if obs_space.spaces["selfpos"].__class__.__name__ == "MultiDiscrete":
                 # process position with one-hot encoder
-                self.discrete_positions = obs_space.spaces['selfpos'].nvec
+                self.discrete_positions = obs_space.spaces["selfpos"].nvec
                 state_feat_dim += sum(self.discrete_positions)
             else:
                 state_feat_dim += 2
 
         # states that contain other agents' specific information
-        if 'comm' in self.obs_keys:
-            self.comm = CommModule(comm_size, comm_len, discrete_comm,
-                                   64, emb_size, comm_rnn)
+        if "comm" in self.obs_keys:
+            self.comm = CommModule(
+                comm_size, comm_len, discrete_comm, 64, emb_size, comm_rnn
+            )
             if comm_rnn:
                 state_feat_dim += 64
             else:
@@ -176,21 +195,22 @@ class InputProcessingModule(nn.Module):
                 else:
                     state_feat_dim += num_agents * 32
 
-        if 'position' in self.obs_keys:
+        if "position" in self.obs_keys:
             self.discrete_positions = None
-            if obs_space.spaces['position'].__class__.__name__ == \
-                    'Tuple':
-                assert len(obs_space.spaces['position']) == num_agents
-                assert obs_space.spaces['position'][0].__class__.__name__ == \
-                    'MultiDiscrete'
+            if obs_space.spaces["position"].__class__.__name__ == "Tuple":
+                assert len(obs_space.spaces["position"]) == num_agents
+                assert (
+                    obs_space.spaces["position"][0].__class__.__name__
+                    == "MultiDiscrete"
+                )
 
                 # process position with one-hot encoder
-                self.discrete_positions = obs_space.spaces['position'][0].nvec
+                self.discrete_positions = obs_space.spaces["position"][0].nvec
                 state_feat_dim += num_agents * sum(self.discrete_positions)
             else:
                 state_feat_dim += num_agents * 2
 
-        if 'done' in self.obs_keys:
+        if "done" in self.obs_keys:
             state_feat_dim += num_agents
 
         if state_feat_dim == 0:
@@ -212,32 +232,33 @@ class InputProcessingModule(nn.Module):
 
         # process images together if provided
         # (3, view_size * view_tile_size, view_size * view_tile_size)
-        if 'pov' in self.obs_keys:
+        if "pov" in self.obs_keys:
             pov = []
             for i in range(self.num_blind_agents, self.num_agents):
-                pov.append(inputs[f'agent_{i}']['pov'])
+                pov.append(inputs[f"agent_{i}"]["pov"])
             x = torch.cat(pov, dim=0)
             x = self.conv(x)  # (N - N_blind, img_feat_dim)
             xs = torch.chunk(x, self.num_agents - self.num_blind_agents)
 
         # process communication
-        if 'comm' in self.obs_keys:
+        if "comm" in self.obs_keys:
             c = []
             for i in range(self.num_agents):
-                c.append(inputs[f'agent_{i}']['comm'])
+                c.append(inputs[f"agent_{i}"]["comm"])
             c = torch.stack(c, dim=0)
             c = self.comm(c)
 
         # process (normalized) time if provided
-        if 't' in self.obs_keys:
+        if "t" in self.obs_keys:
             t = torch.zeros(1, 1).cuda()
-            t[0] = inputs[f'agent_{i}']['t']
+            t[0] = inputs[f"agent_{i}"]["t"]
         else:
             t = None
 
         if self.state_feat_fc is None:
-            img_feat = [torch.zeros(1, 288).cuda() for _ in range(
-                self.num_blind_agents)] + [self.img_layer_norm(f) for f in xs]
+            img_feat = [
+                torch.zeros(1, 288).cuda() for _ in range(self.num_blind_agents)
+            ] + [self.img_layer_norm(f) for f in xs]
             return img_feat
 
         # concatenate observation features
@@ -250,21 +271,20 @@ class InputProcessingModule(nn.Module):
                 feats.append(t)
 
             # concat last env act if provided
-            if 'self_env_act' in self.obs_keys:
+            if "self_env_act" in self.obs_keys:
                 env_act = F.one_hot(
-                    inputs[f'agent_{i}']['self_env_act'].to(torch.int64),
-                    num_classes=self.env_act_dim)
+                    inputs[f"agent_{i}"]["self_env_act"].to(torch.int64),
+                    num_classes=self.env_act_dim,
+                )
                 env_act = torch.reshape(env_act, (1, self.env_act_dim))
                 feats.append(env_act)
 
             # concat agent's own position if provided
-            if 'selfpos' in self.obs_keys:
-                sp = inputs[f'agent_{i}']['selfpos'].to(torch.int64)  # (2,)
+            if "selfpos" in self.obs_keys:
+                sp = inputs[f"agent_{i}"]["selfpos"].to(torch.int64)  # (2,)
                 if self.discrete_positions is not None:
-                    spx = F.one_hot(sp[0],
-                                    num_classes=self.discrete_positions[0])
-                    spy = F.one_hot(sp[1],
-                                    num_classes=self.discrete_positions[1])
+                    spx = F.one_hot(sp[0], num_classes=self.discrete_positions[0])
+                    spy = F.one_hot(sp[1], num_classes=self.discrete_positions[1])
                     sp = torch.cat([spx, spy], dim=-1).float()
                     sp = torch.reshape(sp, (1, sum(self.discrete_positions)))
                 else:
@@ -272,22 +292,19 @@ class InputProcessingModule(nn.Module):
                 feats.append(sp)
 
             # concat comm features for each agent if provided
-            if 'comm' in self.obs_keys:
-                feats.append(c[i:i+1])
+            if "comm" in self.obs_keys:
+                feats.append(c[i : i + 1])
 
-            if 'position' in self.obs_keys and 'done' in self.obs_keys:
+            if "position" in self.obs_keys and "done" in self.obs_keys:
                 # position
-                p = inputs[f'agent_{i}']['position'].to(torch.int64)
+                p = inputs[f"agent_{i}"]["position"].to(torch.int64)
                 if self.discrete_positions is not None:
-                    px = F.one_hot(p[:, 0],
-                                   num_classes=self.discrete_positions[0])
-                    py = F.one_hot(p[:, 1],
-                                   num_classes=self.discrete_positions[1])
+                    px = F.one_hot(p[:, 0], num_classes=self.discrete_positions[0])
+                    py = F.one_hot(p[:, 1], num_classes=self.discrete_positions[1])
                     p = torch.cat([px, py], dim=-1).squeeze(-2)
 
                 # done
-                d = torch.reshape(inputs[f'agent_{i}']['done'],
-                                  (self.num_agents, 1))
+                d = torch.reshape(inputs[f"agent_{i}"]["done"], (self.num_agents, 1))
 
                 pd = torch.cat([p, d], dim=-1)  # (num_agent, pos_dim * 2 + 1)
                 pd = torch.reshape(pd, (1, -1))
@@ -295,23 +312,23 @@ class InputProcessingModule(nn.Module):
                 feats.append(pd)
 
             else:
-                if 'position' in self.obs_keys:
-                    p = inputs[f'agent_{i}']['position'].to(torch.int64)
+                if "position" in self.obs_keys:
+                    p = inputs[f"agent_{i}"]["position"].to(torch.int64)
                     if self.discrete_positions is not None:
-                        px = F.one_hot(p[:, 0],
-                                       num_classes=self.discrete_positions[0])
-                        py = F.one_hot(p[:, 1],
-                                       num_classes=self.discrete_positions[1])
+                        px = F.one_hot(p[:, 0], num_classes=self.discrete_positions[0])
+                        py = F.one_hot(p[:, 1], num_classes=self.discrete_positions[1])
                         p = torch.cat([px, py], dim=-1).squeeze(-2)
-                        p = torch.reshape(p, (1, self.num_agents * sum(
-                            self.discrete_positions)))
+                        p = torch.reshape(
+                            p, (1, self.num_agents * sum(self.discrete_positions))
+                        )
                     else:
                         p = torch.reshape(p, (1, self.num_agents * 2))
                     feats.append(p)
 
-                if 'done' in self.obs_keys:
-                    d = torch.reshape(inputs[f'agent_{i}']['done'],
-                                      (1, self.num_agents))
+                if "done" in self.obs_keys:
+                    d = torch.reshape(
+                        inputs[f"agent_{i}"]["done"], (1, self.num_agents)
+                    )
                     feats.append(d)
 
             if len(feats) > 1:
@@ -322,11 +339,10 @@ class InputProcessingModule(nn.Module):
             if self.layer_norm:
                 cat_feat[i] = self.state_layer_norm(cat_feat[i])
 
-            if 'pov' in self.obs_keys:
+            if "pov" in self.obs_keys:
                 if i >= self.num_blind_agents:
                     if self.layer_norm:
-                        img_feat = self.img_layer_norm(
-                            xs[i - self.num_blind_agents])
+                        img_feat = self.img_layer_norm(xs[i - self.num_blind_agents])
                     else:
                         img_feat = xs[i - self.num_blind_agents]
 

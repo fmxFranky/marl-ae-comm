@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 
 def kld_loss(mu, var):
@@ -23,8 +22,9 @@ def reparamterize(mu_var, use_gpu=False):
     return z, mu, var
 
 
-def discrete_policy_gradient_loss(policy_logit, action, advantage, gae=False,
-                                  value_weight=0.5, entropy_weight=0.01):
+def discrete_policy_gradient_loss(
+    policy_logit, action, advantage, gae=False, value_weight=0.5, entropy_weight=0.01
+):
     policy = F.softmax(policy_logit, dim=-1)[0]
     log_policy = F.log_softmax(policy_logit, dim=-1)[0]
     log_policy_action = log_policy[action]
@@ -35,18 +35,22 @@ def discrete_policy_gradient_loss(policy_logit, action, advantage, gae=False,
         policy_loss = -log_policy_action * advantage[0]
 
     value_loss = advantage ** 2
-    entropy = - (policy * log_policy).sum()
+    entropy = -(policy * log_policy).sum()
 
-    loss = policy_loss + \
-           value_weight * value_loss - \
-           entropy_weight * entropy
+    loss = policy_loss + value_weight * value_loss - entropy_weight * entropy
 
     return loss, policy_loss, value_loss, entropy
 
 
-def policy_gradient_loss(policy_logit, action, advantage, gae=False,
-                         value_weight=0.5, entropy_weight=0.01,
-                         action_space=None):
+def policy_gradient_loss(
+    policy_logit,
+    action,
+    advantage,
+    gae=False,
+    value_weight=0.5,
+    entropy_weight=0.01,
+    action_space=None,
+):
     if action_space is None:
         # default to Discrete
         loss, policy_loss, value_loss, entropy = discrete_policy_gradient_loss(
@@ -54,9 +58,8 @@ def policy_gradient_loss(policy_logit, action, advantage, gae=False,
         )
         return loss, (policy_loss, value_loss, entropy)
 
-    elif action_space.__class__.__name__ == 'MultiDiscrete':
-        policy_logit = torch.split(policy_logit, action_space.nvec.tolist(),
-                                   dim=-1)
+    elif action_space.__class__.__name__ == "MultiDiscrete":
+        policy_logit = torch.split(policy_logit, action_space.nvec.tolist(), dim=-1)
 
         loss = 0.0
         policy_loss = 0.0
@@ -64,7 +67,8 @@ def policy_gradient_loss(policy_logit, action, advantage, gae=False,
         entropy = 0.0
         for i, logit in enumerate(policy_logit):
             l, pl, vl, ent = discrete_policy_gradient_loss(
-                logit, action[i], advantage, gae, value_weight, entropy_weight)
+                logit, action[i], advantage, gae, value_weight, entropy_weight
+            )
             loss += l
             policy_loss += pl
             value_loss += vl
@@ -76,9 +80,9 @@ def policy_gradient_loss(policy_logit, action, advantage, gae=False,
 
         return loss, (policy_loss, value_loss, entropy)
 
-    elif action_space.__class__.__name__ == 'Box':
+    elif action_space.__class__.__name__ == "Box":
         value_loss = advantage ** 2
-        return value_loss, (0., value_loss, 0.)
+        return value_loss, (0.0, value_loss, 0.0)
 
     else:
         raise NotImplementedError

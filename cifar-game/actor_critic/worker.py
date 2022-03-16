@@ -40,8 +40,18 @@ class Worker(mp.Process):
         tau: gae hyperparameter.
     """
 
-    def __init__(self, master, net, env, worker_id, gpu_id=0, t_max=20,
-                 use_gae=True, gamma=0.99, tau=1.0):
+    def __init__(
+        self,
+        master,
+        net,
+        env,
+        worker_id,
+        gpu_id=0,
+        t_max=20,
+        use_gae=True,
+        gamma=0.99,
+        tau=1.0,
+    ):
         super().__init__()
 
         self.worker_id = worker_id
@@ -54,8 +64,10 @@ class Worker(mp.Process):
         self.tau = tau
         self.gpu_id = gpu_id
         self.reward_log = deque(maxlen=10)  # track last 10 finished rewards
-        self.pfmt = 'policy loss: {:0.4f} value loss: {:0.4f} ' + \
-                    'entropy loss: {:0.4f} comm loss: {:0.4f} reward: {:0.4f}'
+        self.pfmt = (
+            "policy loss: {:0.4f} value loss: {:0.4f} "
+            + "entropy loss: {:0.4f} comm loss: {:0.4f} reward: {:0.4f}"
+        )
         self.num_agents = env.num_agents
 
     @within_cuda_device
@@ -84,7 +96,8 @@ class Worker(mp.Process):
                 env_mask_idx = [[10] for _ in range(self.num_agents)]
 
             plogit, value, hidden_state, comm_out, comm_loss = self.net(
-                state_var, hidden_state, env_mask_idx=env_mask_idx)
+                state_var, hidden_state, env_mask_idx=env_mask_idx
+            )
             action, _, _, all_actions = self.net.take_action(plogit, comm_out)
             state, reward, done, info = self.env.step(all_actions)
             state_var = ops.to_state_var(state)
@@ -96,9 +109,9 @@ class Worker(mp.Process):
             target_value = [0 for _ in range(self.num_agents)]
         else:
             with torch.no_grad():
-                target_value = self.net(state_var,
-                                        hidden_state,
-                                        env_mask_idx=env_mask_idx)[1]
+                target_value = self.net(
+                    state_var, hidden_state, env_mask_idx=env_mask_idx
+                )[1]
 
         #  Compute Loss: accumulate rewards and compute gradient
         values = [None for _ in range(self.num_agents)]
@@ -114,7 +127,7 @@ class Worker(mp.Process):
     def run(self):
         self.master.init_tensorboard()
         done = True
-        reward_log = 0.
+        reward_log = 0.0
 
         while not self.master.is_done():
             # synchronize network parameters
@@ -133,11 +146,12 @@ class Worker(mp.Process):
                 done = False
 
                 self.reward_log.append(reward_log)
-                reward_log = 0.
+                reward_log = 0.0
 
             # extract trajectory
-            trajectory, values, target_value, done = \
-                self.get_trajectory(hidden_state, state_var, done)
+            trajectory, values, target_value, done = self.get_trajectory(
+                hidden_state, state_var, done
+            )
 
             all_pls, all_vls, all_els = [], [], []
             all_cls = []
@@ -158,8 +172,7 @@ class Worker(mp.Process):
 
                 pls, vls, els = [], [], []
                 cls = []
-                for i, (pi_logit, action, value, reward, comm_loss
-                        ) in enumerate(traj):
+                for i, (pi_logit, action, value, reward, comm_loss) in enumerate(traj):
 
                     # clip reward (optional)
                     if False:
@@ -171,16 +184,18 @@ class Worker(mp.Process):
 
                     if self.use_gae:
                         # Generalized advantage estimation (GAE)
-                        delta_t = reward[agent_id] + \
-                                  self.gamma * val[agent_id][i].data - \
-                                  val[agent_id][i + 1].data
+                        delta_t = (
+                            reward[agent_id]
+                            + self.gamma * val[agent_id][i].data
+                            - val[agent_id][i + 1].data
+                        )
                         gae = gae * self.gamma * self.tau + delta_t
                     else:
                         gae = False
 
                     tl, (pl, vl, el) = policy_gradient_loss(
-                        pi_logit[agent_id], action[agent_id],
-                        advantage, gae=gae)
+                        pi_logit[agent_id], action[agent_id], advantage, gae=gae
+                    )
                     tl += comm_loss
 
                     pls.append(ops.to_numpy(pl))
@@ -206,14 +221,14 @@ class Worker(mp.Process):
             if self.worker_id == 0:
                 log_dict = {}
                 for agent_id in range(self.num_agents):
-                    log_dict[f'policy_loss/{agent_id}'] = all_pls[agent_id]
-                    log_dict[f'value_loss/{agent_id}'] = all_vls[agent_id]
-                    log_dict[f'entropy/{agent_id}'] = all_els[agent_id]
-                    log_dict[f'comm_loss/{agent_id}'] = all_cls[agent_id]
-                log_dict['policy_loss'] = np.mean(all_pls)
-                log_dict['value_loss'] = np.mean(all_vls)
-                log_dict['entropy'] = np.mean(all_els)
-                log_dict['comm_loss'] = np.mean(all_cls)
+                    log_dict[f"policy_loss/{agent_id}"] = all_pls[agent_id]
+                    log_dict[f"value_loss/{agent_id}"] = all_vls[agent_id]
+                    log_dict[f"entropy/{agent_id}"] = all_els[agent_id]
+                    log_dict[f"comm_loss/{agent_id}"] = all_cls[agent_id]
+                log_dict["policy_loss"] = np.mean(all_pls)
+                log_dict["value_loss"] = np.mean(all_vls)
+                log_dict["entropy"] = np.mean(all_els)
+                log_dict["comm_loss"] = np.mean(all_cls)
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
@@ -224,10 +239,11 @@ class Worker(mp.Process):
                 np.mean(all_vls),
                 np.mean(all_els),
                 np.mean(all_cls),
-                np.mean(self.reward_log))
+                np.mean(self.reward_log),
+            )
 
             self.master.apply_gradients(self.net)
             self.master.increment(progress_str)
 
-        print(f'worker {self.worker_id} is done.')
+        print(f"worker {self.worker_id} is done.")
         return

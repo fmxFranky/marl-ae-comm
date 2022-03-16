@@ -12,4 +12,3 @@ def within_cuda_device(f):
             return f(*args)
 
     return _wrapper
-

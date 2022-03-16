@@ -30,6 +30,8 @@ class LSTMhead(nn.Module):
 
     def init_hidden(self):
         """ initializes zero state (2 x num_layers x 1 x feat_dim) """
-        assert self.is_recurrent, 'model is not recurrent'
-        return (torch.zeros(1, 1, self.hidden_size).cuda(),
-                torch.zeros(1, 1, self.hidden_size).cuda())
+        assert self.is_recurrent, "model is not recurrent"
+        return (
+            torch.zeros(1, 1, self.hidden_size).cuda(),
+            torch.zeros(1, 1, self.hidden_size).cuda(),
+        )

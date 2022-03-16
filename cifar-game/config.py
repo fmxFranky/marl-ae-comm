@@ -3,12 +3,10 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import os, sys
+import os
 import datetime
 import argparse
 
-import json
-from easydict import EasyDict as edict
 
 from util import CfgNode
 from util.misc import cprint
@@ -34,12 +32,12 @@ def get_config(args, eval=False):
 
     config.env_cfg = get_env_cfg()
 
-    config.run_dir = 'runs'
+    config.run_dir = "runs"
     config.num_workers = 16
     config.gpu = [int(g) for g in args.gpu]
 
     # the prefix to the log
-    config.id = ''
+    config.id = ""
 
     # async update steps
     config.tmax = 20
@@ -50,17 +48,17 @@ def get_config(args, eval=False):
     config.lr = 0.0001
 
     # experiment id
-    config.resume_path = ''
+    config.resume_path = ""
 
     # the policy head
-    config.policy = 'lstm'  # ['fc', 'lstm']
-    config.model = 'shared'  # ['shared']
+    config.policy = "lstm"  # ['fc', 'lstm']
+    config.model = "shared"  # ['shared']
     config.share_critic = False
     config.layer_norm = True
 
     # comm options
     config.comm_type = 1  # 0 - no commm, 1 - non-rl comm, 2 - rl comm
-    config.aux_loss = ''  # ['a', 'ap', '']
+    config.aux_loss = ""  # ['a', 'ap', '']
     config.ae_fc_size = 0
     config.use_mlp = False
     config.hidden_size = 128
@@ -88,36 +86,38 @@ def get_config(args, eval=False):
     # automatically generate exp name based on configs
     # ===
 
-    curr_time = str(datetime.datetime.now())[:16].replace(' ', '_')
+    curr_time = str(datetime.datetime.now())[:16].replace(" ", "_")
 
-    id_args = [['seed', config.env_cfg.seed],
-               ['lr', config.lr],
-               ['tmax', config.tmax],
-               ['workers', config.num_workers],
-               ['comm', config.comm_type],
-               ['clen', config.env_cfg.comm_size],
-               ['cpg', config.comm_pg]]
+    id_args = [
+        ["seed", config.env_cfg.seed],
+        ["lr", config.lr],
+        ["tmax", config.tmax],
+        ["workers", config.num_workers],
+        ["comm", config.comm_type],
+        ["clen", config.env_cfg.comm_size],
+        ["cpg", config.comm_pg],
+    ]
 
     if config.comm_type == 1:
-        id_args += [['aux', config.aux_loss], ['aefc', config.ae_fc_size]]
+        id_args += [["aux", config.aux_loss], ["aefc", config.ae_fc_size]]
 
     if config.comm_type == 1 or config.comm_type == 3:
-        id_args += [['mlp', config.use_mlp]]
+        id_args += [["mlp", config.use_mlp]]
 
-    cfg_id = '_'.join([f'{n}-{v}' for n, v in id_args])
+    cfg_id = "_".join([f"{n}-{v}" for n, v in id_args])
 
     if config.env_cfg.discrete_comm:
-        cfg_id += '_disc'
+        cfg_id += "_disc"
     else:
-        cfg_id += '_cont'
+        cfg_id += "_cont"
 
     if config.id:
-        cfg_id = '{}_{}'.format(config.id, cfg_id)
+        cfg_id = "{}_{}".format(config.id, cfg_id)
 
     if eval:
-        cfg_id += '_eval'
+        cfg_id += "_eval"
 
-    exp_name = 'a3c_{}_{}'.format(cfg_id, curr_time)
+    exp_name = "a3c_{}_{}".format(cfg_id, curr_time)
 
     config.exp_name = exp_name
 
@@ -126,10 +126,11 @@ def get_config(args, eval=False):
 
 def parse(eval=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', type=str, default=None)
-    parser.add_argument('--set', nargs='+')
-    parser.add_argument('--gpu', nargs='+', default='0',
-                        help='specify GPUs. (e.g. `0` or `0 1`)')
+    parser.add_argument("--config_path", type=str, default=None)
+    parser.add_argument("--set", nargs="+")
+    parser.add_argument(
+        "--gpu", nargs="+", default="0", help="specify GPUs. (e.g. `0` or `0 1`)"
+    )
 
     args = parser.parse_args()
 
@@ -137,10 +138,10 @@ def parse(eval=False):
     freeze(cfg, save_file=True)
 
     # print config
-    cprint('------ A3C configurations ------', 'y')
+    cprint("------ A3C configurations ------", "y")
     for arg in sorted(vars(args)):
-        print('{0}: {1}'.format(arg, getattr(args, arg)))
-    cprint('--------------------------------', 'y')
+        print("{0}: {1}".format(arg, getattr(args, arg)))
+    cprint("--------------------------------", "y")
 
     return cfg
 
@@ -154,10 +155,10 @@ def set_params(config, file_path=None, list_opt=None):
     if file_path:
         # if list_opt is None or 'run_dir' not in list_opt[::2]:
         #     raise ValueError('Must specify new run directory.')
-        print('- Import config from file {}.'.format(file_path))
+        print("- Import config from file {}.".format(file_path))
         config.merge_from_file(file_path)
     if list_opt:
-        print('- Overwrite config params {}.'.format(str(list_opt[::2])))
+        print("- Overwrite config params {}.".format(str(list_opt[::2])))
         config.merge_from_list(list_opt)
     return config
 
@@ -172,5 +173,5 @@ def freeze(config, save_file=False):
         save_dir = os.path.join(config.run_dir, config.exp_name)
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-        with open(os.path.join(save_dir, 'config.yaml'), 'w') as fout:
+        with open(os.path.join(save_dir, "config.yaml"), "w") as fout:
             fout.write(config.dump())

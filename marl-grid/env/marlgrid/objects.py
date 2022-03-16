@@ -10,20 +10,20 @@ from gym_minigrid.rendering import (
 
 # map of color names to RGB values
 COLORS = {
-    'red': np.array([255, 0, 0]),
-    'orange': np.array([255, 165, 0]),
-    'green': np.array([0, 255, 0]),
-    'blue': np.array([0, 0, 255]),
-    'cyan': np.array([0, 139, 139]),
-    'purple': np.array([112, 39, 195]),
-    'yellow': np.array([255, 255, 0]),
-    'olive': np.array([128, 128, 0]),
-    'grey': np.array([100, 100, 100]),
-    'worst': np.array([74, 65, 42]),
-    'pink': np.array([255, 0, 189]),
-    'white': np.array([255, 255, 255]),
-    'prestige': np.array([255, 255, 255]),
-    'shadow': np.array([35, 25, 30]),  # dark purple color for invisible cells
+    "red": np.array([255, 0, 0]),
+    "orange": np.array([255, 165, 0]),
+    "green": np.array([0, 255, 0]),
+    "blue": np.array([0, 0, 255]),
+    "cyan": np.array([0, 139, 139]),
+    "purple": np.array([112, 39, 195]),
+    "yellow": np.array([255, 255, 0]),
+    "olive": np.array([128, 128, 0]),
+    "grey": np.array([100, 100, 100]),
+    "worst": np.array([74, 65, 42]),
+    "pink": np.array([255, 0, 189]),
+    "white": np.array([255, 255, 255]),
+    "prestige": np.array([255, 255, 255]),
+    "shadow": np.array([35, 25, 30]),  # dark purple color for invisible cells
 }
 
 # used to map colors to integers
@@ -46,7 +46,7 @@ class RegisteredObjectType(type):
 
 
 class WorldObj(metaclass=RegisteredObjectType):
-    def __init__(self, color='worst', state=0):
+    def __init__(self, color="worst", state=0):
         self.color = color
         self.state = state
         self.contains = None
@@ -102,7 +102,7 @@ class WorldObj(metaclass=RegisteredObjectType):
         return enc_class, enc_color, self.state
 
     def describe(self):
-        return f'Obj: {self.type}({self.color}, {self.state})'
+        return f"Obj: {self.type}({self.color}, {self.state})"
 
     @classmethod
     def decode(cls, type, color, state):
@@ -110,7 +110,7 @@ class WorldObj(metaclass=RegisteredObjectType):
             cls_subclasses = {c.__name__: c for c in cls.recursive_subclasses()}
             if type not in cls_subclasses:
                 raise ValueError(
-                    f'Not sure how to construct a {cls} of (sub)type {type}'
+                    f"Not sure how to construct a {cls} of (sub)type {type}"
                 )
             return cls_subclasses[type](color, state)
         elif isinstance(type, int):
@@ -121,15 +121,14 @@ class WorldObj(metaclass=RegisteredObjectType):
         raise NotImplementedError
 
     def str_render(self, dir=0):
-        return '??'
+        return "??"
 
 
 class GridAgent(WorldObj):
-    def __init__(self, *args, neutral_shape, can_overlap, color='red',
-                 **kwargs):
-        super().__init__(*args, **{'color': color, **kwargs})
+    def __init__(self, *args, neutral_shape, can_overlap, color="red", **kwargs):
+        super().__init__(*args, **{"color": color, **kwargs})
         self.metadata = {
-            'color': color,
+            "color": color,
         }
         self.is_agent = True
         self.comm = 0
@@ -143,14 +142,14 @@ class GridAgent(WorldObj):
 
     @property
     def type(self):
-        return 'Agent'
+        return "Agent"
 
     @dir.setter
     def dir(self, dir):
         self.state = self.state // 4 + dir % 4
 
     def str_render(self, dir=0):
-        return ['>>', 'VV', '<<', '^^'][(self.dir + dir) % 4]
+        return [">>", "VV", "<<", "^^"][(self.dir + dir) % 4]
 
     def can_overlap(self):
         return self._can_overlap
@@ -159,27 +158,33 @@ class GridAgent(WorldObj):
         if self.neutral_shape:
             shape_fn = point_in_circle(0.5, 0.5, 0.31)
         else:
-            shape_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50),
-                                         (0.12, 0.81),)
-            shape_fn = rotate_fn(shape_fn, cx=0.5, cy=0.5,
-                                 theta=1.5 * np.pi * self.dir)
+            shape_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
+            shape_fn = rotate_fn(shape_fn, cx=0.5, cy=0.5, theta=1.5 * np.pi * self.dir)
         fill_coords(img, shape_fn, COLORS[self.color])
 
 
 class BulkObj(WorldObj, metaclass=RegisteredObjectType):
     def __hash__(self):
-        return hash((self.__class__, self.color, self.state,
-                     tuple(self.agents)))
+        return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 
     def __eq__(self, other):
         return hash(self) == hash(other)
 
 
 class BonusTile(WorldObj):
-    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1,
-                 initial_reward=True, reset_on_mistake=False, color='yellow',
-                 *args, **kwargs):
-        super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
+    def __init__(
+        self,
+        reward,
+        penalty=-0.1,
+        bonus_id=0,
+        n_bonus=1,
+        initial_reward=True,
+        reset_on_mistake=False,
+        color="yellow",
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **{"color": color, **kwargs, "state": bonus_id})
         self.reward = reward
         self.penalty = penalty
         self.n_bonus = n_bonus
@@ -191,7 +196,7 @@ class BonusTile(WorldObj):
         return True
 
     def str_render(self, dir=0):
-        return 'BB'
+        return "BB"
 
     def get_reward(self, agent):
         # If the agent hasn't hit any bonus tiles, set its bonus state so that
@@ -237,7 +242,7 @@ class Goal(WorldObj):
         return self.reward
 
     def str_render(self, dir=0):
-        return 'GG'
+        return "GG"
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
@@ -248,7 +253,7 @@ class Wall(BulkObj):
         return False
 
     def str_render(self, dir=0):
-        return 'WW'
+        return "WW"
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
@@ -275,7 +280,7 @@ class FreeDoor(WorldObj):
             # door can only be opened once
             pass
         else:
-            raise ValueError(f'?!?!?! FreeDoor in state {self.state}')
+            raise ValueError(f"?!?!?! FreeDoor in state {self.state}")
         return True
 
     def render(self, img):

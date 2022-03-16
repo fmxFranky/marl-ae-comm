@@ -20,14 +20,14 @@ def get_env_cfg():
 
     config.seed = 1
 
-    config.env_type = 'd'
+    config.env_type = "d"
 
     config.num_agents = 2
     config.num_adversaries = 0
 
     config.max_steps = 2048
     config.grid_size = 10
-    config.observation_style = 'dict'
+    config.observation_style = "dict"
     config.observe_position = False
     config.observe_self_position = False
     config.observe_self_env_act = False
@@ -55,8 +55,8 @@ def get_env_cfg():
     # if False, use continuous communication
     config.discrete_comm = False
 
-    config.team_reward_type = 'none'
-    config.team_reward_freq = 'none'
+    config.team_reward_type = "none"
+    config.team_reward_freq = "none"
     config.team_reward_multiplier = 1
 
     return config
@@ -71,12 +71,12 @@ def get_config(args, eval=False):
 
     config.env_cfg = get_env_cfg()
 
-    config.run_dir = 'runs'
+    config.run_dir = "runs"
     config.num_workers = 16
     config.gpu = [int(g) for g in args.gpu]
 
     # the prefix to the log
-    config.id = ''
+    config.id = ""
 
     # async update steps
     config.tmax = 20
@@ -87,11 +87,11 @@ def get_config(args, eval=False):
     config.lr = 0.0001
 
     # experiment id
-    config.resume_path = ''
+    config.resume_path = ""
 
     # the policy head
-    config.policy = 'lstm'  # ['fc', 'lstm']
-    config.model = 'shared'  # ['shared']
+    config.policy = "lstm"  # ['fc', 'lstm']
+    config.model = "shared"  # ['shared']
     config.share_critic = False
     config.layer_norm = True
     config.comm_rnn = True
@@ -103,7 +103,7 @@ def get_config(args, eval=False):
     config.anneal_comm_rew = False
     config.ae_loss_k = 1.0
     config.ae_pg = 0
-    config.ae_type = ''  # ['', 'fc', 'mlp', 'rfc', 'rmlp']
+    config.ae_type = ""  # ['', 'fc', 'mlp', 'rfc', 'rmlp']
     config.img_feat_dim = 64
     config.comm_vf = False
 
@@ -120,24 +120,28 @@ def get_config(args, eval=False):
 
     set_params(config, args.config_path, args.set)
 
-    assert not (config.env_cfg.num_adversaries > 0 and
-                config.env_cfg.num_blind_agents > 0)
+    assert not (
+        config.env_cfg.num_adversaries > 0 and config.env_cfg.num_blind_agents > 0
+    )
 
-    if config.env_cfg.observe_position or config.env_cfg.observe_done or \
-        config.env_cfg.observe_self_position:
-        if config.env_cfg.observation_style != 'dict':
-            cprint('AUTO: correcting observation_style to _dict_', 'r')
-            config.env_cfg.observation_style = 'dict'
+    if (
+        config.env_cfg.observe_position
+        or config.env_cfg.observe_done
+        or config.env_cfg.observe_self_position
+    ):
+        if config.env_cfg.observation_style != "dict":
+            cprint("AUTO: correcting observation_style to _dict_", "r")
+            config.env_cfg.observation_style = "dict"
 
     assert config.env_cfg.num_blind_agents <= config.env_cfg.num_agents
     assert config.env_cfg.num_adversaries == 0
     if config.env_cfg.active_after_done and config.mask:
-        raise ValueError('active_after_done and mask cannot both be True')
+        raise ValueError("active_after_done and mask cannot both be True")
 
-    if (config.env_cfg.observe_position and
-            config.env_cfg.observe_self_position):
-        raise ValueError('observe_position and observe_self_position cannot '
-                         'both be True')
+    if config.env_cfg.observe_position and config.env_cfg.observe_self_position:
+        raise ValueError(
+            "observe_position and observe_self_position cannot " "both be True"
+        )
 
     # ===
     # automatically generate env name based on env configs
@@ -148,33 +152,35 @@ def get_config(args, eval=False):
     # automatically generate exp name based on configs
     # ===
 
-    curr_time = str(datetime.datetime.now())[:16].replace(' ', '_')
+    curr_time = str(datetime.datetime.now())[:16].replace(" ", "_")
 
-    id_args = [['seed', config.env_cfg.seed],
-               ['lr', config.lr],
-               ['tmax', config.tmax],
-               ['workers', config.num_workers],
-               ['ms', config.env_cfg.max_steps],
-               ['ae_type', config.ae_type]]
+    id_args = [
+        ["seed", config.env_cfg.seed],
+        ["lr", config.lr],
+        ["tmax", config.tmax],
+        ["workers", config.num_workers],
+        ["ms", config.env_cfg.max_steps],
+        ["ae_type", config.ae_type],
+    ]
 
     if config.comm_vf:
-        id_args += [['commvf', 'True']]
+        id_args += [["commvf", "True"]]
 
     if config.ae_pg:
-        id_args += [['ae_pg', config.ae_pg]]
+        id_args += [["ae_pg", config.ae_pg]]
 
     if config.img_feat_dim != 64:
-        id_args += [['imgdim', config.img_feat_dim]]
+        id_args += [["imgdim", config.img_feat_dim]]
 
-    cfg_id = '_'.join([f'{n}-{v}' for n, v in id_args])
+    cfg_id = "_".join([f"{n}-{v}" for n, v in id_args])
 
     if config.id:
-        cfg_id = '{}_{}'.format(config.id, cfg_id)
+        cfg_id = "{}_{}".format(config.id, cfg_id)
 
     if eval:
-        cfg_id += '_eval'
+        cfg_id += "_eval"
 
-    exp_name = '{}/a3c_{}_{}'.format(config.env_cfg.env_name, cfg_id, curr_time)
+    exp_name = "{}/a3c_{}_{}".format(config.env_cfg.env_name, cfg_id, curr_time)
 
     config.exp_name = exp_name
 
@@ -183,10 +189,11 @@ def get_config(args, eval=False):
 
 def parse(eval=False):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', type=str, default=None)
-    parser.add_argument('--set', nargs='+')
-    parser.add_argument('--gpu', nargs='+', default='0',
-                        help='specify GPUs. (e.g. `0` or `0 1`)')
+    parser.add_argument("--config_path", type=str, default=None)
+    parser.add_argument("--set", nargs="+")
+    parser.add_argument(
+        "--gpu", nargs="+", default="0", help="specify GPUs. (e.g. `0` or `0 1`)"
+    )
 
     args = parser.parse_args()
 
@@ -194,11 +201,11 @@ def parse(eval=False):
     freeze(cfg, save_file=True)
 
     # print config
-    cprint(f'Registered env [{cfg.env_cfg.env_name}]', 'g')
-    cprint('------ A3C configurations ------', 'y')
+    cprint(f"Registered env [{cfg.env_cfg.env_name}]", "g")
+    cprint("------ A3C configurations ------", "y")
     for arg in sorted(vars(args)):
-        print('{0}: {1}'.format(arg, getattr(args, arg)))
-    cprint('--------------------------------', 'y')
+        print("{0}: {1}".format(arg, getattr(args, arg)))
+    cprint("--------------------------------", "y")
 
     return cfg
 
@@ -212,10 +219,10 @@ def set_params(config, file_path=None, list_opt=None):
     if file_path:
         # if list_opt is None or 'run_dir' not in list_opt[::2]:
         #     raise ValueError('Must specify new run directory.')
-        print('- Import config from file {}.'.format(file_path))
+        print("- Import config from file {}.".format(file_path))
         config.merge_from_file(file_path)
     if list_opt:
-        print('- Overwrite config params {}.'.format(str(list_opt[::2])))
+        print("- Overwrite config params {}.".format(str(list_opt[::2])))
         config.merge_from_list(list_opt)
     return config
 
@@ -230,5 +237,5 @@ def freeze(config, save_file=False):
         save_dir = os.path.join(config.run_dir, config.exp_name)
         if not os.path.isdir(save_dir):
             os.makedirs(save_dir)
-        with open(os.path.join(save_dir, 'config.yaml'), 'w') as fout:
+        with open(os.path.join(save_dir, "config.yaml"), "w") as fout:
             fout.write(config.dump())

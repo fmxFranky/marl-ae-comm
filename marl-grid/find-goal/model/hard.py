@@ -17,38 +17,49 @@ class HardSharedNetwork(A3CTemplate):
     """
     A network to handle input with no communication.
     """
-    def __init__(self, obs_space, action_size, num_agents, hidden_size=256,
-                 num_blind_agents=0, share_critic=False, layer_norm=False):
+
+    def __init__(
+        self,
+        obs_space,
+        action_size,
+        num_agents,
+        hidden_size=256,
+        num_blind_agents=0,
+        share_critic=False,
+        layer_norm=False,
+    ):
         super().__init__()
 
         self.action_size = action_size
         self.num_agents = num_agents
-        self.input_processor = InputProcessingModule(obs_space,
-                                                     0,
-                                                     0,
-                                                     True,
-                                                     0,
-                                                     num_agents,
-                                                     num_blind_agents,
-                                                     layer_norm)
+        self.input_processor = InputProcessingModule(
+            obs_space, 0, 0, True, 0, num_agents, num_blind_agents, layer_norm
+        )
         self.feat_dim = self.input_processor.feat_dim
 
         # individual memories
         self.head = nn.ModuleList(
-            [LSTMhead(self.feat_dim - 32 * 3 * 3, hidden_size, num_layers=1
-                      ) for _ in range(num_blind_agents)
-             ] + [LSTMhead(self.feat_dim, hidden_size, num_layers=1
-                           ) for _ in range(num_blind_agents, num_agents)])
+            [
+                LSTMhead(self.feat_dim - 32 * 3 * 3, hidden_size, num_layers=1)
+                for _ in range(num_blind_agents)
+            ]
+            + [
+                LSTMhead(self.feat_dim, hidden_size, num_layers=1)
+                for _ in range(num_blind_agents, num_agents)
+            ]
+        )
         self.is_recurrent = True
 
         self.share_critic = share_critic
         if share_critic:
             self.critic_linear = nn.Linear(hidden_size, 1)
         else:
-            self.critic_linear = nn.ModuleList([nn.Linear(
-                hidden_size, 1) for _ in range(num_agents)])
-        self.actor_linear = nn.ModuleList([nn.Linear(
-            hidden_size, self.action_size) for _ in range(num_agents)])
+            self.critic_linear = nn.ModuleList(
+                [nn.Linear(hidden_size, 1) for _ in range(num_agents)]
+            )
+        self.actor_linear = nn.ModuleList(
+            [nn.Linear(hidden_size, self.action_size) for _ in range(num_agents)]
+        )
 
         self.reset_parameters()
         return
@@ -56,17 +67,16 @@ class HardSharedNetwork(A3CTemplate):
     def reset_parameters(self):
         if self.share_critic:
             self.critic_linear.weight.data = normalized_columns_initializer(
-                self.critic_linear.weight.data, 1.0)
+                self.critic_linear.weight.data, 1.0
+            )
             self.critic_linear.bias.data.fill_(0)
         else:
             for m in self.critic_linear:
-                m.weight.data = normalized_columns_initializer(m.weight.data,
-                                                               1.0)
+                m.weight.data = normalized_columns_initializer(m.weight.data, 1.0)
                 m.bias.data.fill_(0)
 
         for m in self.actor_linear:
-            m.weight.data = normalized_columns_initializer(m.weight.data,
-                                                           0.01)
+            m.weight.data = normalized_columns_initializer(m.weight.data, 0.01)
             m.bias.data.fill_(0)
         return
 
@@ -78,8 +88,7 @@ class HardSharedNetwork(A3CTemplate):
         act_logp_dict = {}
         ent_list = []
         for agent_name, logits in policy_logit.items():
-            act, act_logp, ent = super(HardSharedNetwork, self).take_action(
-                logits)
+            act, act_logp, ent = super(HardSharedNetwork, self).take_action(logits)
 
             act_dict[agent_name] = act
             act_logp_dict[agent_name] = act_logp
@@ -99,7 +108,7 @@ class HardSharedNetwork(A3CTemplate):
         env_actor_out, env_critic_out = {}, {}
 
         for i, agent_name in enumerate(inputs.keys()):
-            if agent_name == 'global':
+            if agent_name == "global":
                 continue
 
             x, hidden_state[i] = self.head[i](cat_feat[i], hidden_state[i])
