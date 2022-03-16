@@ -5,9 +5,6 @@ from __future__ import unicode_literals
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from model.init import weights_init
 
 
 class LSTMhead(nn.Module):

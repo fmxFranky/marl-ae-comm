@@ -3,11 +3,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import numpy as np
 import torch
-import time, os, sys
-from collections import deque
-from loss import policy_gradient_loss
 from torch.utils.tensorboard import SummaryWriter
 
 

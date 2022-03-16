@@ -3,13 +3,10 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import numpy as np
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from model.a3c_template import A3CTemplate, take_action
-from model.init import normalized_columns_initializer, weights_init
+from model.a3c_template import A3CTemplate
+from model.init import normalized_columns_initializer
 from model.model_utils import LSTMhead, InputProcessingModule
 
 

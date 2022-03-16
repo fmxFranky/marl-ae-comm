@@ -5,8 +5,6 @@ from __future__ import unicode_literals
 
 import numpy as np
 import cv2
-import os
-import imageio
 import skvideo.io
 
 

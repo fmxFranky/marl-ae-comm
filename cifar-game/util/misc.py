@@ -3,9 +3,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import torch
-import os, time, cv2, numpy as np
-
 
 class bcolors:
     HEADER = "\033[95m"

@@ -3,12 +3,10 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import os, sys
+import os
 import datetime
 import argparse
 
-import json
-from easydict import EasyDict as edict
 
 from envs.grid_world_environment import get_env_name
 from util import CfgNode

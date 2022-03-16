@@ -3,12 +3,8 @@ Based on MiniGrid: https://github.com/maximecb/gym-minigrid.
 """
 
 import gym
-import gym_minigrid
-import math
 import numpy as np
-import warnings
-from enum import IntEnum
-from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
+from gym_minigrid.rendering import downsample
 
 from .agents import GridAgentInterface
 from .objects import Wall, Goal, COLORS

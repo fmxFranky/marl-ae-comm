@@ -5,13 +5,9 @@ from __future__ import unicode_literals
 
 import torch
 import torch.multiprocessing as mp
-from torch.utils.tensorboard import SummaryWriter
 
-import numpy as np
 import os
 import os.path as osp
-import sys
-import time
 
 import config
 from envs.environments import make_environment

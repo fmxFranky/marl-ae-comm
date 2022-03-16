@@ -5,14 +5,12 @@ from __future__ import unicode_literals
 
 import os
 
-import math
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from model.a3c_template import A3CTemplate, take_action, take_comm_action
-from model.init import normalized_columns_initializer, weights_init
+from model.init import normalized_columns_initializer
 from model.model_utils import LSTMhead
 from model.simclr import SimCLR
 

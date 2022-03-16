@@ -1,11 +1,7 @@
 import copy
 import json
-import time
 import os
 import os.path as osp
-import shutil
-import warnings
-from collections import defaultdict
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +9,6 @@ import matplotlib.pyplot as plt
 import torch
 
 from util import ops
-from util.decorator import within_cuda_device
 from util.misc import check_done
 
 

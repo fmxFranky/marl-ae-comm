@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 
 def kld_loss(mu, var):

@@ -3,7 +3,6 @@
 import torch.nn as nn
 import torchvision
 
-from model.simclr_modules.resnet_hacks import modify_resnet_model
 from model.simclr_modules.identity import Identity
 
 

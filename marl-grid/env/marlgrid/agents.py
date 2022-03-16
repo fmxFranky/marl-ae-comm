@@ -1,7 +1,6 @@
 import gym
 import numba
 import numpy as np
-import warnings
 from enum import IntEnum
 
 from .objects import GridAgent, BonusTile

@@ -3,9 +3,6 @@ import copy
 import time
 import os
 import os.path as osp
-import shutil
-import warnings
-from collections import defaultdict
 
 import numpy as np
 
