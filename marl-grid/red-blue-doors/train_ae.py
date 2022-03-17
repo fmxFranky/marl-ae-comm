@@ -6,6 +6,7 @@ import os.path as osp
 import config
 import torch
 import torch.multiprocessing as mp
+import wandb
 from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker_ae import Worker
@@ -22,6 +23,13 @@ if __name__ == "__main__":
 
     cfg = config.parse()
     assert cfg.env_cfg.comm_len > 0
+    if cfg.use_wandb:
+        wandb.init(
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}_ae")
     print(">> {}".format(cfg.exp_name))
@@ -84,6 +92,7 @@ if __name__ == "__main__":
                     worker_id=worker_id,
                     gpu_id=gpu_id,
                     ae_loss_k=cfg.ae_loss_k,
+                    use_wandb=cfg.use_wandb,
                 ),
             ]
 
@@ -102,6 +111,7 @@ if __name__ == "__main__":
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
             net_type="ae",
+            use_wandb=cfg.use_wandb,
         )
         workers.append(evaluator)
 

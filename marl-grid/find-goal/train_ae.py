@@ -92,6 +92,7 @@ if __name__ == "__main__":
                     worker_id=worker_id,
                     gpu_id=gpu_id,
                     ae_loss_k=cfg.ae_loss_k,
+                    use_wandb=cfg.use_wandb,
                 ),
             ]
 
@@ -110,6 +111,7 @@ if __name__ == "__main__":
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
             net_type="ae",
+            use_wandb=cfg.use_wandb,
         )
         workers.append(evaluator)
 

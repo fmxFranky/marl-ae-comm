@@ -6,6 +6,7 @@ import os.path as osp
 import config
 import torch
 import torch.multiprocessing as mp
+import wandb
 from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker import Worker
@@ -22,6 +23,13 @@ if __name__ == "__main__":
     os.environ["OMP_NUM_THREADS"] = "1"
 
     cfg = config.parse()
+    if cfg.use_wandb:
+        wandb.init(
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
@@ -106,6 +114,7 @@ if __name__ == "__main__":
                     gpu_id=gpu_id,
                     num_acts=num_acts,
                     anneal_comm_rew=cfg.anneal_comm_rew,
+                    use_wandb=cfg.use_wandb,
                 ),
             ]
 
@@ -123,6 +132,7 @@ if __name__ == "__main__":
             video_save_freq=cfg.video_save_freq,
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
+            use_wandb=cfg.use_wandb,
         )
         workers.append(evaluator)
 

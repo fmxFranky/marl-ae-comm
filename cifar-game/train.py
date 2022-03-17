@@ -9,6 +9,7 @@ import config
 import torch
 import torch.multiprocessing as mp
 import torchvision.transforms as transforms
+import wandb
 from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker import Worker
@@ -26,6 +27,13 @@ if __name__ == "__main__":
     os.environ["OMP_NUM_THREADS"] = "1"
 
     cfg = config.parse()
+    if cfg.use_wandb:
+        wandb.init(
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
@@ -97,6 +105,7 @@ if __name__ == "__main__":
                         create_env(),
                         worker_id=worker_id,
                         gpu_id=gpu_id,
+                        use_wandb=cfg.use_wandb,
                     ),
                 ]
             else:
@@ -107,6 +116,7 @@ if __name__ == "__main__":
                         create_env(),
                         worker_id=worker_id,
                         gpu_id=gpu_id,
+                        use_wandb=cfg.use_wandb,
                     ),
                 ]
 
