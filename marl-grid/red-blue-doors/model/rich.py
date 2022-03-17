@@ -1,14 +1,10 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import numpy as np
 import torch.nn as nn
-
 from model.a3c_template import A3CTemplate, take_action, take_comm_action
 from model.init import normalized_columns_initializer
-from model.model_utils import LSTMhead, InputProcessingModule
+from model.model_utils import InputProcessingModule, LSTMhead
 
 
 class RichSharedNetwork(A3CTemplate):

@@ -1,12 +1,13 @@
 import inspect
-import numpy.random as random
 import sys
+
+import numpy.random as random
 from gym.envs.registration import register as gym_register
 
-from .findgoal import FindGoalMultiGrid
-from .redbluedoors import RedBlueDoorsMultiGrid
 from ..agents import GridAgentInterface
 from ..base import MultiGridEnv
+from .findgoal import FindGoalMultiGrid
+from .redbluedoors import RedBlueDoorsMultiGrid
 
 this_module = sys.modules[__name__]
 

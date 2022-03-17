@@ -1,28 +1,22 @@
 """Training script for CIFAR Game environment."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import torch
-import torch.multiprocessing as mp
-
-from torchvision import datasets
-import torchvision.transforms as transforms
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import os.path as osp
 
 import config
-from envs.game_environment import create_game_env
+import torch
+import torch.multiprocessing as mp
+import torchvision.transforms as transforms
+from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker import Worker
 from actor_critic.worker_pg import WorkerPGComm
-from actor_critic.evaluator import Evaluator
+from envs.game_environment import create_game_env
 from model.cifar import CifarNet
+from torchvision import datasets
 from util.shared_opt import SharedAdam
-
 
 if __name__ == "__main__":
     # (0) args and steps to make this work.

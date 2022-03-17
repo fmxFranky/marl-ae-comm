@@ -1,20 +1,14 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 from collections import deque
 
 import numpy as np
-
 import torch
 import torch.multiprocessing as mp
-
 from loss import policy_gradient_loss
-
 from util import ops
-from util.misc import check_done
 from util.decorator import within_cuda_device
+from util.misc import check_done
 
 
 class Worker(mp.Process):
@@ -52,6 +46,7 @@ class Worker(mp.Process):
         tau=1.0,
         num_acts=1,
         anneal_comm_rew=False,
+        use_wandb=False,
     ):
         super().__init__()
 
@@ -69,6 +64,7 @@ class Worker(mp.Process):
         self.agents = [f"agent_{i}" for i in range(self.env.num_agents)]
         self.num_acts = num_acts
         self.anneal_comm_rew = anneal_comm_rew
+        self.use_wandb = use_wandb
 
     @within_cuda_device
     def get_trajectory(self, hidden_state, state_var, done, weight_iter):
@@ -247,6 +243,8 @@ class Worker(mp.Process):
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
+                    if self.use_wandb:
+                        wandb.log({k: v}, step=weight_iter)
 
             # all_pls, all_vls, all_els shape == (num_acts, num_agents)
             progress_str = self.pfmt.format(

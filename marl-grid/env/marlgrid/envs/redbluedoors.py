@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..base import MultiGridEnv, MultiGrid
+from ..base import MultiGrid, MultiGridEnv
 from ..objects import FreeDoor
 
 
@@ -87,7 +87,7 @@ class RedBlueDoorsMultiGrid(MultiGridEnv):
 
         obs_dict, _, _, info_dict = MultiGridEnv.step(self, action_dict)
 
-        step_rewards = np.zeros((self.num_agents,), dtype=np.float)
+        step_rewards = np.zeros((self.num_agents,), dtype=float)
 
         red_door_opened_after = self.red_door.is_open()
         blue_door_opened_after = self.blue_door.is_open()

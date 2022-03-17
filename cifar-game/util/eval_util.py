@@ -3,11 +3,9 @@ import json
 import os
 import os.path as osp
 
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
 import torch
-
 from util import ops
 from util.misc import check_done
 

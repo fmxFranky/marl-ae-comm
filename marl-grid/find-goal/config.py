@@ -1,16 +1,12 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
-import datetime
 import argparse
-
+import datetime
+import os
 
 from envs.grid_world_environment import get_env_name
-from util import CfgNode
 from util.misc import cprint
+from util.yacs import CfgNode
 
 
 def get_env_cfg():
@@ -76,6 +72,8 @@ def get_config(args, eval=False):
     config.run_dir = "runs"
     config.num_workers = 16
     config.gpu = [int(g) for g in args.gpu]
+    config.use_wandb = False
+    config.wandb_project_name = "marl-ae-comm"
 
     # the prefix to the log
     config.id = ""

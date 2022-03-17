@@ -1,5 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_ents(ents, reward, max_time, save_path, max_ent=None, t_red_door=None):

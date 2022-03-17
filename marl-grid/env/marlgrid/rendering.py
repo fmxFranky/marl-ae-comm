@@ -1,5 +1,6 @@
-import pyglet
 import sys
+
+import pyglet
 from pyglet.gl import *
 
 

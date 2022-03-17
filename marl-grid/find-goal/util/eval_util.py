@@ -1,5 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_ents(ents, steps, save_path, adv_indices, max_ent=None):

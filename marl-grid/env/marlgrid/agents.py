@@ -1,9 +1,10 @@
+from enum import IntEnum
+
 import gym
 import numba
 import numpy as np
-from enum import IntEnum
 
-from .objects import GridAgent, BonusTile
+from .objects import BonusTile, GridAgent
 
 
 class GridAgentInterface(GridAgent):
@@ -396,7 +397,7 @@ class GridAgentInterface(GridAgent):
         if not self.see_through_walls:
             return occlude_mask(~opacity_grid, self.get_view_pos())
         else:
-            return np.full(opacity_grid.shape, 1, dtype=np.bool)
+            return np.full(opacity_grid.shape, 1, dtype=bool)
 
 
 @numba.njit

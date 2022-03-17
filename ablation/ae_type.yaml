@@ -1,0 +1,41 @@
+description: MARL JOB
+target:
+  service: amlk8s
+  # run "amlt target list amlk8s" to list the names of available AMLK8s targets
+  # run "amlt target info" to list the names of available AMLK8s targets
+  name: itpscusv100cl #itpscusv100cl # #itpscusv100cl #itpeusp40cl #itpseasiav100cl #itpscusv100cl #
+  vc: resrchvc
+
+environment:
+  image: mxfeng/deep_rl:replenishment
+  registry: docker.io # any public registry can be specified here
+  setup:
+    - cd ./marl-grid/env
+    - pip install -e .
+    - pip install gym==0.23.0
+    - wandb login 31ce01e4120061694da54a54ab0dafbee1262420
+
+code:
+  # local directory of the code. this will be uploaded to the server.
+  # $CONFIG_DIR is expanded to the directory of this config file
+  local_dir: $CONFIG_DIR
+
+search:
+  job_template:
+    name: marlcomm_{auto:s}
+    command:
+      - cd ../find_goal
+      - python train_ae.py 
+        --set num_workers 8 env_cfg.comm_len 10 ae_type {ae_type}
+        use_wandb True wandb_project_name marl-ae-comm seed {seed}
+        --gpu 0
+  type: grid
+  max_trials: 64
+  params:
+    - name: ae_type
+      spec: discrete
+      values: ['', 'fc', 'mlp', 'rfc', 'rmlp']
+    - name: seed
+      spec: discrete
+      values: [1, 2, 3, 4, 5, 6, 7, 8, 9 , 10]
+    

@@ -1,14 +1,13 @@
-import csv
 import copy
-import time
+import csv
 import os
 import os.path as osp
+import time
 
 import numpy as np
-
 import torch
 import torch.multiprocessing as mp
-
+import wandb
 from util import ops
 from util.decorator import within_cuda_device
 from util.eval_util import plot_ents
@@ -41,6 +40,7 @@ class Evaluator(mp.Process):
         video_save_freq=10,
         ckpt_save_freq=10,
         num_eval_episodes=10,
+        use_wandb=False,
     ):
         super().__init__()
         self.master = master
@@ -49,6 +49,7 @@ class Evaluator(mp.Process):
         self.gpu_id = gpu_id
         self.fps = 10
         self.num_agents = env.num_agents
+        self.use_wandb = use_wandb
 
         self.num_eval_episodes = num_eval_episodes
         self.video_save_dir = save_dir_fmt.format("video")
@@ -178,6 +179,8 @@ class Evaluator(mp.Process):
                 self.master.writer.add_scalar(
                     k, v / self.num_eval_episodes, weight_iter
                 )
+                if self.use_wandb:
+                    wandb.log({k: v / self.num_eval_episodes}, step=weight_iter)
 
             # save weights
             self.master.save_ckpt(

@@ -1,22 +1,18 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-import torch
-import torch.multiprocessing as mp
-
-import os, os.path as osp
+import os
+import os.path as osp
 
 import config
-from envs.environments import make_environment
+import torch
+import torch.multiprocessing as mp
+from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker import Worker
-from actor_critic.evaluator import Evaluator
-from model.rich import RichSharedNetwork
+from envs.environments import make_environment
 from model.hard import HardSharedNetwork
+from model.rich import RichSharedNetwork
 from util.shared_opt import SharedAdam
-
 
 if __name__ == "__main__":
     # (0) args and steps to make this work.

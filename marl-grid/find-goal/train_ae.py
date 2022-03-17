@@ -1,19 +1,16 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import torch
-import torch.multiprocessing as mp
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import os.path as osp
 
 import config
-from envs.environments import make_environment
+import torch
+import torch.multiprocessing as mp
+import wandb
+from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker_ae import Worker
-from actor_critic.evaluator import Evaluator
+from envs.environments import make_environment
 from model.ae import AENetwork
 from util.shared_opt import SharedAdam
 
@@ -26,6 +23,13 @@ if __name__ == "__main__":
 
     cfg = config.parse()
     assert cfg.env_cfg.comm_len > 0
+    if cfg.use_wandb:
+        wandb.init(
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}_ae")
     print(">> {}".format(cfg.exp_name))

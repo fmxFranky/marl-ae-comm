@@ -1,7 +1,6 @@
-import gym
 import cv2
+import gym
 import numpy as np
-
 
 ENV_ACT_ID_TO_STR = {
     0: "right",
