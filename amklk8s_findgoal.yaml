@@ -7,7 +7,7 @@ target:
   vc: resrchvc
 
 environment:
-  image: mxfeng/deep_rl:replenishment
+  image: mxfeng/deep_rl:marl_comm
   registry: docker.io # any public registry can be specified here
   setup:
     - pip install -e ./marl-grid/env

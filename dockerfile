@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
+FROM nvcr.io/nvidia/pytorch:21.04-py3
 ################################
 # Install apt-get Requirements #
 ################################
@@ -12,9 +12,8 @@ RUN rm -rf /var/lib/apt/lists/* \
     DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
     apt-utils build-essential ca-certificates dpkg-dev pkg-config software-properties-common \
     cifs-utils openssh-server nfs-common net-tools iputils-ping iproute2 locales htop tzdata \
-    tar wget git swig vim curl tmux zip unzip rar unrar sudo zsh cmake \
-    libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev libglfw3 \
-    libgl1-mesa-glx libncurses5-dev libncursesw5-dev openmpi-bin openmpi-common libopenmpi-dev
+    tar wget git swig vim curl tmux zip unzip rar unrar sudo zsh cmake nvtop \
+    libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev libglfw3 libgl1-mesa-glx libncurses5-dev libncursesw5-dev
 
 ################
 # Set Timezone #
@@ -28,21 +27,12 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     rm -rf /usr/share/zoneinfo/UTC && \
     dpkg-reconfigure --frontend=noninteractive tzdata
 
-#########
-# NVTOP #
-#########
-RUN git clone https://github.com/Syllo/nvtop.git && \
-    mkdir -p nvtop/build && cd nvtop/build && \
-    cmake .. && \
-    make && \
-    make install
-
 ###################
 # python packages #
 ###################
-RUN conda install ruamel.yaml mpi4py -y
-RUN ${PIP_INSTALL} gym easydict imageio opencv_contrib_python \
-    pillow scikit-image scikit-video tensorboard matplotlib wandb
+RUN conda install ruamel.yaml -y
+RUN ${PIP_INSTALL} gym==0.23.0 easydict opencv_contrib_python \
+    pillow scikit-video wandb
 
 ##################
 # Apt auto clean #
