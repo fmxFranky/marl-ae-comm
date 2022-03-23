@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.11.0-cuda11.3-cudnn8-devel
+FROM pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
 ################################
 # Install apt-get Requirements #
 ################################
@@ -13,7 +13,8 @@ RUN rm -rf /var/lib/apt/lists/* \
     apt-utils build-essential ca-certificates dpkg-dev pkg-config software-properties-common \
     cifs-utils openssh-server nfs-common net-tools iputils-ping iproute2 locales htop tzdata \
     tar wget git swig vim curl tmux zip unzip rar unrar sudo zsh cmake \
-    libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev libglfw3 libgl1-mesa-glx libncurses5-dev libncursesw5-dev
+    libgl1-mesa-dev libgl1-mesa-glx libglew-dev libosmesa6-dev libglfw3 \
+    libgl1-mesa-glx libncurses5-dev libncursesw5-dev openmpi-bin openmpi-common libopenmpi-dev
 
 ################
 # Set Timezone #
@@ -34,12 +35,12 @@ RUN git clone https://github.com/Syllo/nvtop.git && \
     mkdir -p nvtop/build && cd nvtop/build && \
     cmake .. && \
     make && \
-    sudo make install
+    make install
 
 ###################
 # python packages #
 ###################
-RUN conda install ruamel.yaml flake8 yapf -y
+RUN conda install ruamel.yaml mpi4py -y
 RUN ${PIP_INSTALL} gym easydict imageio opencv_contrib_python \
     pillow scikit-image scikit-video tensorboard matplotlib wandb
 

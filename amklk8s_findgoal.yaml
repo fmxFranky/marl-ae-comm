@@ -10,8 +10,7 @@ environment:
   image: mxfeng/deep_rl:replenishment
   registry: docker.io # any public registry can be specified here
   setup:
-    - cd ./marl-grid/env
-    - pip install -e .
+    - pip install -e ./marl-grid/env
     - pip install gym==0.23.0
     - wandb login 31ce01e4120061694da54a54ab0dafbee1262420
 
@@ -23,12 +22,12 @@ code:
 search:
   job_template:
     name: marlcomm_{auto:s}
+    sku: G2
     command:
-      - cd ../find_goal
-      - python train_ae.py 
+      - python ./marl-grid/find-goal/train_ae.py 
         --set num_workers 8 env_cfg.comm_len 10 ae_type {ae_type}
         use_wandb True wandb_project_name marl-ae-comm seed {seed}
-        --gpu 0
+        --gpu 0 1
   type: grid
   max_trials: 64
   params:
