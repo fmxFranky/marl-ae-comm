@@ -46,7 +46,7 @@ class Worker(mp.Process):
         tau=1.0,
         num_acts=1,
         anneal_comm_rew=False,
-        use_wandb=False,
+        log_queue=None,
     ):
         super().__init__()
 
@@ -64,7 +64,7 @@ class Worker(mp.Process):
         self.agents = [f"agent_{i}" for i in range(self.env.num_agents)]
         self.num_acts = num_acts
         self.anneal_comm_rew = anneal_comm_rew
-        self.use_wandb = use_wandb
+        self.log_queue = log_queue
 
     @within_cuda_device
     def get_trajectory(self, hidden_state, state_var, done, weight_iter):
@@ -243,8 +243,9 @@ class Worker(mp.Process):
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
-                    if self.use_wandb:
-                        wandb.log({k: v}, step=weight_iter)
+                if self.log_queue:
+                    log_dict["train_weight_iter"] = weight_iter
+                    self.log_queue.put(log_dict)
 
             # all_pls, all_vls, all_els shape == (num_acts, num_agents)
             progress_str = self.pfmt.format(

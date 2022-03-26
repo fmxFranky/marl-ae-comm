@@ -44,7 +44,7 @@ class Evaluator(mp.Process):
         ckpt_save_freq=10,
         num_eval_episodes=10,
         net_type="",
-        use_wandb=False,
+        log_queue=None,
     ):
         super().__init__()
         self.master = master
@@ -53,7 +53,7 @@ class Evaluator(mp.Process):
         self.gpu_id = gpu_id
         self.fps = 10
         self.agents = [f"agent_{i}" for i in range(env.num_agents)]
-        self.use_wandb = use_wandb
+        self.log_queue = log_queue
 
         self.num_eval_episodes = num_eval_episodes
         self.video_save_dir = save_dir_fmt.format("video")
@@ -84,6 +84,8 @@ class Evaluator(mp.Process):
             weight_iter = self.master.copy_weights(self.net)
 
             log_dict = defaultdict(int)
+            new_log_dict = defaultdict(int)
+
             for eval_id in range(self.num_eval_episodes):
                 env_copy = copy.deepcopy(self.eval_env[eval_id])
 
@@ -160,6 +162,16 @@ class Evaluator(mp.Process):
                     save_path = osp.join(self.video_save_dir, f"{weight_iter}.mp4")
                     shutil.copyfile(latest_path, save_path)
 
+                    if self.log_queue:
+                        new_log_dict["env_action_entropy_plot"] = wandb.Image(ent_path)
+                        new_log_dict["episode_video"] = wandb.Video(
+                            np.array(
+                                np.transpose(frames, [0, 3, 1, 2]), dtype=np.uint8
+                            ),
+                            fps=self.fps,
+                            format="mp4",
+                        )
+
                 # log info (same for all agents)
                 log_dict["rewards"] += np.sum(agent_rewards)
                 log_dict["episode_len"] += max_time
@@ -171,8 +183,14 @@ class Evaluator(mp.Process):
                 self.master.writer.add_scalar(
                     k, v / self.num_eval_episodes, weight_iter
                 )
-                if self.use_wandb:
-                    wandb.log({k: v / self.num_eval_episodes}, step=weight_iter)
+
+            if self.log_queue:
+                for k, v in log_dict.items():
+                    new_log_dict[k] = v / self.num_eval_episodes
+                new_log_dict["eval_weight_iter"] = weight_iter
+                if "episode_video" in new_log_dict.keys():
+                    print(new_log_dict)
+                self.log_queue.put(new_log_dict)
 
             # save weights
             self.master.save_ckpt(

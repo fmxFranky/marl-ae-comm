@@ -45,7 +45,7 @@ class WorkerPGComm(mp.Process):
         use_gae=True,
         gamma=0.99,
         tau=1.0,
-        use_wandb=False,
+        log_queue=None,
     ):
         super().__init__()
 
@@ -65,7 +65,7 @@ class WorkerPGComm(mp.Process):
         )
         self.num_agents = env.num_agents
         self.num_acts = 2  # env act and comm act
-        self.use_wandb = use_wandb
+        self.log_queue = log_queue
 
     @within_cuda_device
     def get_trajectory(self, hidden_state, state_var, done):
@@ -256,8 +256,10 @@ class WorkerPGComm(mp.Process):
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
-                    if self.use_wandb:
-                        wandb.log({k: v}, step=weight_iter)
+                    
+                if self.log_queue:
+                    log_dict["train_weight_iter"] = weight_iter
+                    self.log_queue.put(log_dict)
 
             # all_pls, all_vls, all_els shape == (num_acts, num_agents)
             progress_str = self.pfmt.format(

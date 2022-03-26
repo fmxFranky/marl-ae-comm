@@ -22,12 +22,12 @@ code:
 search:
   job_template:
     name: marlcomm_{auto:s}
-    sku: G2
+    sku: G4
     command:
       - python ./marl-grid/find-goal/train_ae.py 
         --set num_workers 8 env_cfg.comm_len 10 ae_type {ae_type}
         use_wandb True wandb_project_name marl-ae-comm seed {seed}
-        --gpu 0 1
+        --gpu 0 1 2 3
   type: grid
   max_trials: 64
   params:

@@ -32,7 +32,7 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
 ###################
 RUN conda install ruamel.yaml -y
 RUN ${PIP_INSTALL} gym==0.23.0 easydict opencv_contrib_python \
-    pillow scikit-video wandb
+    pillow scikit-video wandb moviepy
 
 ##################
 # Apt auto clean #
