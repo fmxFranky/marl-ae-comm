@@ -28,12 +28,14 @@ if __name__ == "__main__":
 
     cfg = config.parse()
     if cfg.use_wandb:
-        wandb.init(
+        wandb_logger = WandbLoggingProcess(
+            queue=mp.Queue(),
             name=cfg.exp_name,
             project=cfg.wandb_project_name,
             dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
             config=cfg,
         )
+        wandb_logger.start()
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
@@ -144,6 +146,8 @@ if __name__ == "__main__":
 
     # > join when done
     [w.join() for w in workers]
+    if cfg.use_wandb:
+        wandb_logger.join()
 
     master.save_ckpt(
         cfg.train_iter, osp.join(save_dir_fmt.format("ckpt"), "latest.pth")

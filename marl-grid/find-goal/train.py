@@ -144,6 +144,8 @@ if __name__ == "__main__":
 
     # > join when done
     [w.join() for w in workers]
+    if cfg.use_wandb:
+        wandb_logger.join()
 
     master.save_ckpt(
         cfg.train_iter, osp.join(save_dir_fmt.format("ckpt"), "latest.pth")
