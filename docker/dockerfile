@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/pytorch:20.11-py3
+FROM pytorch/pytorch:1.9.1-cuda11.1-cudnn8-runtime
 ################################
 # Install apt-get Requirements #
 ################################
@@ -27,11 +27,21 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     rm -rf /usr/share/zoneinfo/UTC && \
     dpkg-reconfigure --frontend=noninteractive tzdata
 
+#########
+# NVTOP #
+#########
+RUN git clone https://github.com/Syllo/nvtop.git && \
+    mkdir -p nvtop/build && cd nvtop/build && \
+    cmake .. && \
+    make && \
+    sudo make install
+
 ###################
 # python packages #
 ###################
 RUN conda install ruamel.yaml ffmpeg -y
-RUN ${PIP_INSTALL} gym easydict pillow scikit-video wandb moviepy
+RUN ${PIP_INSTALL} gym easydict pillow scikit-video scikit-image \
+    wandb moviepy matplotlib opencv-python tensorboard
 
 ##################
 # Apt auto clean #

@@ -23,6 +23,8 @@ search:
   job_template:
     name: marlcomm_{auto:s}
     sku: G4
+    aml_mpirun:
+      process_count_per_node: 0
     command:
       - python ./marl-grid/find-goal/train_ae.py 
         --set num_workers 16 env_cfg.comm_len 10 env_cfg.seed {seed}

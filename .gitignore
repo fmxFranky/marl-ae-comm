@@ -3,3 +3,6 @@ __pycache__
 *.egg-info/
 runs/
 cifar-game/data
+amlt/
+.amltconfig
+.amltignore
