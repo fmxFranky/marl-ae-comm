@@ -23,15 +23,6 @@ if __name__ == "__main__":
     os.environ["OMP_NUM_THREADS"] = "1"
 
     cfg = config.parse()
-    if cfg.use_wandb:
-        wandb_logger = WandbLoggingProcess(
-            queue=mp.Queue(),
-            name=cfg.exp_name,
-            project=cfg.wandb_project_name,
-            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
-            config=cfg,
-        )
-        wandb_logger.start()
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
@@ -96,6 +87,18 @@ if __name__ == "__main__":
         max_iteration=cfg.train_iter,
     )
 
+    if cfg.use_wandb:
+        wandb_logger = WandbLoggingProcess(
+            master,
+            save_dir_fmt=save_dir_fmt,
+            log_queue=mp.Queue(),
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
+        wandb_logger.start()
+
     # (3) create workers
     num_acts = 1
     if cfg.env_cfg.comm_len > 0:
@@ -116,7 +119,7 @@ if __name__ == "__main__":
                     gpu_id=gpu_id,
                     num_acts=num_acts,
                     anneal_comm_rew=cfg.anneal_comm_rew,
-                    log_queue=wandb_logger.queue if cfg.use_wandb else None,
+                    log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
                 ),
             ]
 
@@ -134,7 +137,7 @@ if __name__ == "__main__":
             video_save_freq=cfg.video_save_freq,
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
-            log_queue=wandb_logger.queue if cfg.use_wandb else None,
+            log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
         )
         workers.append(evaluator)
 
@@ -145,9 +148,11 @@ if __name__ == "__main__":
 
     # > join when done
     [w.join() for w in workers]
-    if cfg.use_wandb:
-        wandb_logger.join()
 
     master.save_ckpt(
         cfg.train_iter, osp.join(save_dir_fmt.format("ckpt"), "latest.pth")
     )
+
+    if cfg.use_wandb:
+        wandb_logger.log_queue.put(None)
+        wandb_logger.join()

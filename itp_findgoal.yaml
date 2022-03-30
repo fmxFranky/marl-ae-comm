@@ -30,13 +30,18 @@ search:
         --set num_workers 16 env_cfg.comm_len 10 env_cfg.seed {seed}
         use_wandb True wandb_project_name marl-ae-comm ae_type {ae_type}
         --gpu 0 1 2 3
+    submit_args:
+      env:
+        AMLT_NO_TENSORBOARD_PATCHING: true
+      container_args:
+        shm_size: 64g
   type: grid
   max_trials: 16
   params:
     - name: ae_type
       spec: discrete
-      values: ['', 'fc', 'mlp', 'rfc', 'rmlp']
+      values: ["", "fc", "mlp"]
     - name: seed
       spec: discrete
-      values: [1, 2, 3]
+      values: [1, 2, 3, 4, 5]
     

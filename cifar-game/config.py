@@ -31,6 +31,8 @@ def get_config(args, eval=False):
     config.run_dir = "runs"
     config.num_workers = 16
     config.gpu = [int(g) for g in args.gpu]
+    config.use_wandb = False
+    config.wandb_project_name = "marl-ae-comm"
 
     # the prefix to the log
     config.id = ""
@@ -98,7 +100,7 @@ def get_config(args, eval=False):
         id_args += [["aux", config.aux_loss], ["aefc", config.ae_fc_size]]
 
     if config.comm_type == 1 or config.comm_type == 3:
-        id_args += [["mlp", config.use_mlp]]
+        id_args += [["mlp_ae", config.use_mlp]]
 
     cfg_id = "_".join([f"{n}-{v}" for n, v in id_args])
 

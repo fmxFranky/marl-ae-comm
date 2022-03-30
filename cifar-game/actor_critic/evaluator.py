@@ -183,13 +183,11 @@ class Evaluator(mp.Process):
                 self.master.writer.add_scalar(
                     k, v / self.num_eval_episodes, weight_iter
                 )
-                
+
             if self.log_queue:
                 for k, v in log_dict.items():
                     new_log_dict[k] = v / self.num_eval_episodes
                 new_log_dict["eval_weight_iter"] = weight_iter
-                if "episode_video" in new_log_dict.keys():
-                    print(new_log_dict)
                 self.log_queue.put(new_log_dict)
 
             # save weights

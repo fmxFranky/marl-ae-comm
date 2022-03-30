@@ -9,7 +9,6 @@ import config
 import torch
 import torch.multiprocessing as mp
 import torchvision.transforms as transforms
-import wandb
 from actor_critic.evaluator import Evaluator
 from actor_critic.master import Master
 from actor_critic.worker import Worker
@@ -18,6 +17,7 @@ from envs.game_environment import create_game_env
 from model.cifar import CifarNet
 from torchvision import datasets
 from util.shared_opt import SharedAdam
+from util.wandb import WandbLoggingProcess
 
 if __name__ == "__main__":
     # (0) args and steps to make this work.
@@ -27,15 +27,6 @@ if __name__ == "__main__":
     os.environ["OMP_NUM_THREADS"] = "1"
 
     cfg = config.parse()
-    if cfg.use_wandb:
-        wandb_logger = WandbLoggingProcess(
-            queue=mp.Queue(),
-            name=cfg.exp_name,
-            project=cfg.wandb_project_name,
-            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
-            config=cfg,
-        )
-        wandb_logger.start()
 
     save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
@@ -92,6 +83,18 @@ if __name__ == "__main__":
         max_iteration=cfg.train_iter,
     )
 
+    if cfg.use_wandb:
+        wandb_logger = WandbLoggingProcess(
+            master,
+            save_dir_fmt=save_dir_fmt,
+            log_queue=mp.Queue(),
+            name=cfg.exp_name,
+            project=cfg.wandb_project_name,
+            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            config=cfg,
+        )
+        wandb_logger.start()
+
     # (3) create slave workers
     workers = []
     for worker_id in range(cfg.num_workers):
@@ -107,7 +110,7 @@ if __name__ == "__main__":
                         create_env(),
                         worker_id=worker_id,
                         gpu_id=gpu_id,
-                        use_wandb=cfg.use_wandb,
+                        log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
                     ),
                 ]
             else:
@@ -118,7 +121,7 @@ if __name__ == "__main__":
                         create_env(),
                         worker_id=worker_id,
                         gpu_id=gpu_id,
-                        use_wandb=cfg.use_wandb,
+                        log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
                     ),
                 ]
 
@@ -136,6 +139,7 @@ if __name__ == "__main__":
             video_save_freq=cfg.video_save_freq,
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
+            log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
         )
         workers.append(evaluator)
 
@@ -146,9 +150,11 @@ if __name__ == "__main__":
 
     # > join when done
     [w.join() for w in workers]
-    if cfg.use_wandb:
-        wandb_logger.join()
 
     master.save_ckpt(
         cfg.train_iter, osp.join(save_dir_fmt.format("ckpt"), "latest.pth")
     )
+
+    if cfg.use_wandb:
+        wandb_logger.log_queue.put(None)
+        wandb_logger.join()

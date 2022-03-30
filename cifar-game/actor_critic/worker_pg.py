@@ -5,7 +5,6 @@ from collections import deque
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-import wandb
 from loss import policy_gradient_loss
 from util import ops
 from util.decorator import within_cuda_device
@@ -256,7 +255,7 @@ class WorkerPGComm(mp.Process):
 
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
-                    
+
                 if self.log_queue:
                     log_dict["train_weight_iter"] = weight_iter
                     self.log_queue.put(log_dict)
