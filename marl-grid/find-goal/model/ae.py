@@ -6,6 +6,36 @@ import torch.nn.functional as F
 from model.a3c_template import A3CTemplate
 from model.init import normalized_columns_initializer
 from model.model_utils import ImgModule, LSTMhead
+from util.ops import make_heads, multi_head_attention
+
+
+class MHAEncoderLayer(torch.nn.Module):
+    def __init__(self, embedding_dim, n_heads=8):
+        super().__init__()
+
+        self.n_heads = n_heads
+
+        self.Wq = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wk = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wv = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.multi_head_combine = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.feed_forward = torch.nn.Sequential(
+            torch.nn.Linear(embedding_dim, embedding_dim * 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(embedding_dim * 4, embedding_dim),
+        )
+        self.norm1 = torch.nn.BatchNorm1d(embedding_dim)
+        self.norm2 = torch.nn.BatchNorm1d(embedding_dim)
+
+    def forward(self, x, mask=None):
+        q = make_heads(self.Wq(x), self.n_heads)
+        k = make_heads(self.Wk(x), self.n_heads)
+        v = make_heads(self.Wv(x), self.n_heads)
+        x = x + self.multi_head_combine(multi_head_attention(q, k, v, mask))
+        x = self.norm1(x.view(-1, x.size(-1))).view(*x.size())
+        x = x + self.feed_forward(x)
+        x = self.norm2(x.view(-1, x.size(-1))).view(*x.size())
+        return x
 
 
 class STE(torch.autograd.Function):
@@ -182,7 +212,7 @@ class EncoderDecoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(64, img_feat_dim),
             )
-            self.fc = nn.Sequential(nn.Linear(img_feat_dim, comm_len), nn.Sigmoid(),)
+            self.fc = nn.Sequential(nn.Linear(img_feat_dim, comm_len), nn.Sigmoid())
             self.decoder = nn.Sequential(
                 nn.Linear(img_feat_dim, 64),
                 nn.ReLU(),
@@ -235,6 +265,35 @@ class EncoderDecoder(nn.Module):
                 nn.ReLU(),
                 nn.Linear(128, in_size),
             )
+        elif ae_type in ["attn", "masked_attn"]:
+            # masked attention
+            self.encoder = nn.Sequential(
+                nn.Linear(in_size, 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, 32),
+                nn.ReLU(),
+                nn.Linear(32, comm_len),
+                nn.Sigmoid(),
+            )
+            self.attn_encoder = nn.Sequential(
+                MHAEncoderLayer(comm_len, n_heads=1),
+                MHAEncoderLayer(comm_len, n_heads=1),
+            )
+            self.attn_decoder = nn.Sequential(
+                MHAEncoderLayer(comm_len, n_heads=1),
+                MHAEncoderLayer(comm_len, n_heads=1),
+            )
+            self.decoder = nn.Sequential(
+                nn.Linear(comm_len, 32),
+                nn.ReLU(),
+                nn.Linear(32, 64),
+                nn.ReLU(),
+                nn.Linear(64, 128),
+                nn.ReLU(),
+                nn.Linear(128, in_size),
+            )
         else:
             raise NotImplementedError
 
@@ -246,24 +305,28 @@ class EncoderDecoder(nn.Module):
         input: inputs[f'agent_{i}']['comm'] (num_agents, comm_len)
             (note that agent's own state is at the last index)
         """
-        if self.ae_type:
-            # ['fc', 'mlp', 'rfc', 'rmlp']
+        if self.ae_type in ["fc", "mlp", "rfc", "rmlp"]:
             return x
-        else:
+        elif self.ae_type == "":
             return self.decoder(x)  # (num_agents, in_size)
+        elif self.ae_type in ["attn", "masked_attn"]:
+            return self.decoder(self.attn_decoder(x[None]).squeeze())
 
     def forward(self, feat):
         encoded = self.encoder(feat)
 
         if self.ae_type in {"rfc", "rmlp"}:
+            # do not detach since there's no reconstruction loss
             if self.discrete_comm:
                 encoded = STE.apply(encoded)
             return encoded, torch.tensor(0.0)
 
         elif self.ae_type in {"fc", "mlp"}:
+            # get intermediate reconstruction loss
             decoded = self.decoder(encoded)
             loss = F.mse_loss(decoded, feat)
 
+            # detach encoded features and get comm
             comm = self.fc(encoded.detach())
             if self.discrete_comm:
                 comm = STE.apply(comm)
@@ -276,6 +339,31 @@ class EncoderDecoder(nn.Module):
             loss = F.mse_loss(decoded, feat)
             return encoded.detach(), loss
 
+        elif self.ae_type == "masked_attn":
+            N = self.preprocessor.num_agents
+            # (1) make attention with others comm features
+            encoded = self.attn_encoder(encoded[None]).squeeze()
+            if self.discrete_comm:
+                encoded = STE.apply(encoded)
+            # (2) mask self comm feature
+            masked_encoded = torch.repeat_interleave(encoded[None], repeats=N, dim=0)
+            for i in range(N):
+                masked_encoded[i, i, :] = 0.0
+            # (3) make attention for masked sequence
+            masked_decoded = self.attn_decoder(masked_encoded)
+            # (4) decoding
+            decoded = torch.cat([masked_decoded[i, i].unsqueeze(0) for i in range(N)])
+            decoded = self.decoder(decoded)
+            loss = F.mse_loss(decoded, feat)
+            return encoded.detach(), loss
+        elif self.ae_type == "attn":
+            encoded = self.attn_encoder(encoded[None]).squeeze()
+            if self.discrete_comm:
+                encoded = STE.apply(encoded)
+            decoded = self.attn_decoder(encoded[None]).squeeze()
+            decoded = self.decoder(decoded)
+            loss = F.mse_loss(decoded, feat)
+            return encoded.detach(), loss
         else:
             raise NotImplementedError
 
@@ -317,7 +405,7 @@ class AENetwork(A3CTemplate):
 
         feat_dim = self.comm_ae.preprocessor.feat_dim
 
-        if ae_type == "":
+        if ae_type in ["", "attn", "masked_attn"]:
             self.input_processor = InputProcessor(
                 obs_space, feat_dim, num_agents, last_fc_dim=img_feat_dim
             )
@@ -385,7 +473,11 @@ class AENetwork(A3CTemplate):
         # (1) pre-process inputs
         comm_feat = []
         for i in range(self.num_agents):
-            cf = self.comm_ae.decode(inputs[f"agent_{i}"]["comm"][:-1])
+            if self.comm_ae.ae_type in ["attn", "masked_attn"]:
+                cf = self.comm_ae.decode(inputs[f"agent_{i}"]["comm"])[:-1]
+            else:
+                cf = self.comm_ae.decode(inputs[f"agent_{i}"]["comm"][:-1])
+
             if not self.ae_pg:
                 cf = cf.detach()
             comm_feat.append(cf)

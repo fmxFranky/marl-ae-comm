@@ -40,7 +40,7 @@ search:
   params:
     - name: ae_type
       spec: discrete
-      values: ["", "fc", "mlp"]
+      values: ["attn", "masked_attn"]
     - name: seed
       spec: discrete
       values: [1, 2, 3, 4, 5]

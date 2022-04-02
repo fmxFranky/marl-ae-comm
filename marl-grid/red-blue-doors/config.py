@@ -66,8 +66,8 @@ def get_config(args, eval=False):
     config.env_cfg = get_env_cfg()
 
     config.run_dir = "runs"
-    config.num_workers = 16
     config.gpu = [int(g) for g in args.gpu]
+    config.num_workers = len(config.gpu) * 4
     config.use_wandb = False
     config.wandb_project_name = "marl-ae-comm"
 

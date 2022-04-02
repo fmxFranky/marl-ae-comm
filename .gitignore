@@ -5,3 +5,4 @@ cifar-game/data
 amlt/
 .amltconfig
 .amltignore
+.vscode

@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 def to_state_var(x, use_gpu=True, dtype=np.float32):
@@ -64,3 +65,26 @@ def norm_col_init(weights, std=1.0):
     x = torch.randn(weights.size())
     x *= std / torch.sqrt((x ** 2).sum(1, keepdim=True))
     return x
+
+
+def multi_head_attention(q, k, v, mask=None):
+    # q shape = (B, n_heads, n, key_dim)   : n can be either 1 or N
+    # k,v shape = (B, n_heads, N, key_dim)
+    # mask.shape = (B, group, N)
+
+    B, n_heads, n, key_dim = q.shape
+
+    # score.shape = (B, n_heads, n, N)
+    score = torch.matmul(q, k.transpose(2, 3)) / np.sqrt(q.size(-1))
+
+    if mask is not None:
+        score += mask[:, None, :, :].expand_as(score)
+
+    shp = [q.size(0), q.size(-2), q.size(1) * q.size(-1)]
+    attn = torch.matmul(F.softmax(score, dim=3), v).transpose(1, 2)
+    return attn.reshape(*shp)
+
+
+def make_heads(qkv, n_heads):
+    shp = (qkv.size(0), qkv.size(1), n_heads, -1)
+    return qkv.reshape(*shp).transpose(1, 2)
