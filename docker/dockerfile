@@ -41,7 +41,7 @@ RUN git clone https://github.com/Syllo/nvtop.git && \
 ###################
 RUN conda install ruamel.yaml ffmpeg -y
 RUN ${PIP_INSTALL} gym easydict pillow scikit-video scikit-image \
-    wandb moviepy matplotlib opencv-python tensorboard
+    wandb moviepy matplotlib opencv-python tensorboard hydra-core kornia
 
 ##################
 # Apt auto clean #

@@ -5,37 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model.a3c_template import A3CTemplate
 from model.init import normalized_columns_initializer
-from model.model_utils import ImgModule, LSTMhead
-from util.ops import make_heads, multi_head_attention
-
-
-class MHAEncoderLayer(torch.nn.Module):
-    def __init__(self, embedding_dim, n_heads=8):
-        super().__init__()
-
-        self.n_heads = n_heads
-
-        self.Wq = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wk = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wv = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.multi_head_combine = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.feed_forward = torch.nn.Sequential(
-            torch.nn.Linear(embedding_dim, embedding_dim * 4),
-            torch.nn.ReLU(),
-            torch.nn.Linear(embedding_dim * 4, embedding_dim),
-        )
-        self.norm1 = torch.nn.BatchNorm1d(embedding_dim)
-        self.norm2 = torch.nn.BatchNorm1d(embedding_dim)
-
-    def forward(self, x, mask=None):
-        q = make_heads(self.Wq(x), self.n_heads)
-        k = make_heads(self.Wk(x), self.n_heads)
-        v = make_heads(self.Wv(x), self.n_heads)
-        x = x + self.multi_head_combine(multi_head_attention(q, k, v, mask))
-        x = self.norm1(x.view(-1, x.size(-1))).view(*x.size())
-        x = x + self.feed_forward(x)
-        x = self.norm2(x.view(-1, x.size(-1))).view(*x.size())
-        return x
+from model.model_utils import ImgModule, LSTMhead, MHAEncoderLayer
 
 
 class STE(torch.autograd.Function):
@@ -169,6 +139,9 @@ class InputProcessor(nn.Module):
                 cat_feat[i] = torch.cat([cat_feat[i], c], dim=-1)
 
         return cat_feat
+
+    def encode_obs(self, obses):
+        return self.img_layer_norm(self.conv(obses))
 
 
 class EncoderDecoder(nn.Module):
@@ -414,6 +387,18 @@ class AENetwork(A3CTemplate):
                 obs_space, comm_len, num_agents, last_fc_dim=img_feat_dim
             )
 
+        # # auxilary task
+        # self.position = PositionalEmbedding(feat_dim)
+        # self.attn_layers = nn.ModuleList(
+        #     [MHAEncoderLayer(feat_dim, n_heads=8) for _ in range(6)]
+        # )
+        # self.segment_embeddings = nn.Embedding(self.num_agents, feat_dim)
+        # self.transformation = nn.Sequential(
+        #     nn.ReplicationPad2d(4),
+        #     RandomCrop(obs_space["pov"].shape[-2:]),
+        #     Intensity(scale=0.5),
+        # )
+
         # individual memories
         self.feat_dim = self.input_processor.feat_dim + comm_len
         self.head = nn.ModuleList(
@@ -515,3 +500,85 @@ class AENetwork(A3CTemplate):
             comm_out.detach(),
             comm_ae_loss,
         )
+
+    # def get_mlm_loss(self, inputs, mlm_bsz, mlm_length, mlm_ratio, mlm_agents):
+    #     # build label
+    #     aug_inputs1 = inputs.copy()
+    #     for i in range(self.num_agents):
+    #         obs = inputs[f"agent_{i}"]["pov"]
+    #         aug_inputs1[f"agent_{i}"]["pov"] = self.transformation(obs)
+    #         for k, v in inputs[f"agent_{i}"].items():
+    #             if k != "pov":
+    #                 aug_inputs1[f"agent_{i}"][k] = v
+    #     seq_label_feat = torch.cat(
+    #         [
+    #             feat.view(mlm_bsz, mlm_length, -1)
+    #             for feat in self.input_processor(aug_inputs1)
+    #         ],
+    #         dim=0 if mlm_agents == 1 else 1,
+    #     )
+
+    #     # build mlm outputs
+    #     aug_inputs2 = inputs.copy()
+    #     if mlm_length > 1:
+    #         for i in range(self.num_agents):
+    #             obs = inputs[f"agent_{i}"]["pov"]
+    #             obs = obs.view(mlm_bsz, mlm_length, *obs.shape[1:])
+    #             masked = torch.zeros((mlm_bsz, mlm_length), dtype=torch.bool)
+    #             for row in range(mlm_bsz):
+    #                 for col in range(mlm_length):
+    #                     if random.random() < mlm_ratio:
+    #                         obs[row, col] = 0
+    #                         masked[row, col] = True
+    #             with torch.no_grad():
+    #                 aug_inputs2[f"agent_{i}"]["pov"] = self.transformation(
+    #                     obs.flatten(0, 1)
+    #                 )
+    #             aug_inputs2[f"agent_{i}"]["masked"] = masked
+    #         masked = torch.cat(
+    #             [aug_inputs2[f"agent_{i}"]["masked"] for i in range(self.num_agents)],
+    #             dim=0 if mlm_agents == 1 else 1,
+    #         )
+    #     elif mlm_length == 1 and mlm_agents > 1:
+    #         masked = torch.zeros((mlm_bsz, mlm_agents), dtype=torch.bool)
+    #         for j in range(mlm_bsz):
+    #             masked_agent_id = np.random.choice(self.num_agents)
+    #             for i in range(self.num_agents):
+    #                 obs = inputs[f"agent_{i}"]["pov"]
+    #                 if i == masked_agent_id:
+    #                     inputs[f"agent_{i}"]["pov"][j].zero_()
+    #                     masked[j, i] = True
+    #         with torch.no_grad():
+    #             for i in range(self.num_agents):
+    #                 aug_inputs2[f"agent_{i}"]["pov"] = self.transformation(
+    #                     aug_inputs2[f"agent_{i}"]["pov"]
+    #                 )
+    #     else:
+    #         raise ValueError("mlm_length * mlm_agents must be > 1")
+
+    #     seq_feat = [
+    #         feat.view(mlm_bsz, mlm_length, -1)
+    #         for feat in self.input_processor(aug_inputs2)
+    #     ]
+    #     seq_feat = torch.cat(seq_feat, dim=0 if mlm_agents == 1 else 1,)
+
+    #     if mlm_agents > 1:
+    #         seg_ids = torch.tensor([[i] * mlm_length for i in range(mlm_agents)])
+    #         seg_ids = torch.repeat_interleave(seg_ids, mlm_bsz, dim=0)
+    #         segment = self.segment_embeddings(seg_ids.to(seq_feat).long())
+    #         segment = segment.view_as(seq_feat)
+    #         # for i in range(self.num_agents):
+    #         #     seq_feat[:, i * mlm_length : (i + 1) * mlm_length] += position
+    #         seq_feat = seq_feat + segment
+
+    #     if mlm_length > 1:
+    #         position = self.position(mlm_length * mlm_agents)
+    #         seq_feat = seq_feat + position
+
+    #     # transformer encoder
+    #     for i in range(len(self.attn_layers)):
+    #         seq_feat = self.attn_layers[i](seq_feat)
+
+    #     # mse loss
+    #     loss = F.mse_loss(seq_feat[masked], seq_label_feat[masked])
+    #     return loss

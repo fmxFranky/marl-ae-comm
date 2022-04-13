@@ -1,0 +1,98 @@
+env_cfg:
+  active_after_done: false
+  can_overlap: false
+  clutter_density: 0.15
+  comm_len: 0
+  # if False, use continuous communication
+  discrete_comm: true
+  discrete_position: true
+  env_name: null
+  env_type: c
+  grid_size: 15
+  info_gain_rew: false
+  max_steps: 512
+  neutral_shape: true
+  num_adversaries: 0
+  num_agents: 3
+  # if `num_blind_agents` == b, the FIRST b agents do not get image obs
+  num_blind_agents: 0
+  observation_style: dict
+  observe_done: false
+  observe_position: false
+  observe_self_env_act: false
+  observe_self_position: true
+  observe_t: false
+  seed: 1
+  # update env policy / comm policy using only env reward / team reward
+  separate_rew_more: false
+  team_reward_freq: none
+  team_reward_multiplier: 1
+  team_reward_type: share
+  view_size: 7
+  view_tile_size: 6
+
+# async update steps
+tmax: 20
+
+# max total training iterations
+train_iter: 300000
+lr: 0.0001
+
+# experiment id
+resume_path: ""
+
+# the policy head
+policy: lstm
+model: shared
+share_critic: false
+layer_norm: true
+comm_rnn: true
+
+# mask logits of unavailable actions
+mask: true
+
+# # update env policy using only env reward
+# separate_rew: true
+
+# training
+anneal_comm_rew: false
+ae_loss_k: 1.0
+ae_std: 1.0
+ae_pg: 0
+ae_type: "" # ['', 'fc', 'mlp', 'rfc', 'rmlp']
+ae_agent_done: false
+img_feat_dim: 64
+comm_vf: false
+
+# auxilary task
+mlm_agents: 3
+mlm_bsz: 64
+mlm_encoded: true
+mlm_length: 5
+mlm_loss_k: 1.0
+mlm_ratio: 0.5
+mlm_rb_size: 100000
+
+# eval configs
+video_save_freq: 20
+ckpt_save_freq: 100
+num_eval_episodes: 10
+num_eval_videos: 10
+eval_ae: false
+
+# experiment configs
+algo: ae-comm # ['no-comm', 'rl-comm', 'ae-rl-comm', 'ae-comm']
+gpu:
+  - 0
+id: ""
+exp_name: null
+seed: 1
+num_workers: 1
+run_dir: ""
+use_wandb: false
+wandb_project_name: marl-ae-comm
+
+hydra:
+  job:
+    env_set:
+      OMP_NUM_THREADS: "1"

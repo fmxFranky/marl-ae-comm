@@ -1,8 +1,16 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import random
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-from ops import to_torch
+
+
+def to_torch(x, use_gpu=True, dtype=np.float32):
+    x = np.array(x, dtype=dtype)
+    var = torch.from_numpy(x)
+    return var.cuda() if use_gpu is not None else var
 
 
 def kld_loss(mu, var):
@@ -84,3 +92,137 @@ def policy_gradient_loss(
 
     else:
         raise NotImplementedError
+
+
+def mlm_loss(input_processor, attetnion_net, inputs):
+    mlm_bsz = attetnion_net.mlm_bsz
+    mlm_length = attetnion_net.mlm_length
+    mlm_agents = attetnion_net.mlm_agents
+    mlm_ratio = attetnion_net.mlm_ratio
+    num_agents = attetnion_net.num_agents
+
+    # build label
+    aug_inputs1 = inputs.copy()
+    for i in range(num_agents):
+        obs = inputs[f"agent_{i}"]["pov"]
+        aug_inputs1[f"agent_{i}"]["pov"] = attetnion_net.transformation(obs)
+        for k, v in inputs[f"agent_{i}"].items():
+            if k != "pov":
+                aug_inputs1[f"agent_{i}"][k] = v
+    seq_label_feat = torch.cat(
+        [feat.view(mlm_bsz, mlm_length, -1) for feat in input_processor(aug_inputs1)],
+        dim=0 if mlm_agents == 1 else 1,
+    )
+
+    # build mlm outputs
+    aug_inputs2 = inputs.copy()
+    if mlm_length > 1:
+        for i in range(num_agents):
+            obs = inputs[f"agent_{i}"]["pov"]
+            obs = obs.view(mlm_bsz, mlm_length, *obs.shape[1:])
+            masked = torch.zeros((mlm_bsz, mlm_length), dtype=torch.bool)
+            for row in range(mlm_bsz):
+                for col in range(mlm_length):
+                    if random.random() < mlm_ratio:
+                        obs[row, col] = 0
+                        masked[row, col] = True
+            with torch.no_grad():
+                aug_inputs2[f"agent_{i}"]["pov"] = attetnion_net.transformation(
+                    obs.flatten(0, 1)
+                )
+            aug_inputs2[f"agent_{i}"]["masked"] = masked
+        masked = torch.cat(
+            [aug_inputs2[f"agent_{i}"]["masked"] for i in range(num_agents)],
+            dim=0 if mlm_agents == 1 else 1,
+        )
+    elif mlm_length == 1 and mlm_agents > 1:
+        masked = torch.zeros((mlm_bsz, mlm_agents), dtype=torch.bool)
+        for j in range(mlm_bsz):
+            masked_agent_id = np.random.choice(num_agents)
+            for i in range(num_agents):
+                obs = inputs[f"agent_{i}"]["pov"]
+                if i == masked_agent_id:
+                    inputs[f"agent_{i}"]["pov"][j].zero_()
+                    masked[j, i] = True
+        with torch.no_grad():
+            for i in range(num_agents):
+                aug_inputs2[f"agent_{i}"]["pov"] = attetnion_net.transformation(
+                    aug_inputs2[f"agent_{i}"]["pov"]
+                )
+    else:
+        raise ValueError("mlm_length * mlm_agents must be > 1")
+
+    seq_feat = [
+        feat.view(mlm_bsz, mlm_length, -1) for feat in input_processor(aug_inputs2)
+    ]
+    seq_feat = torch.cat(seq_feat, dim=0 if mlm_agents == 1 else 1)
+    seq_feat = attetnion_net(seq_feat)
+
+    # mse loss
+    loss = F.mse_loss(seq_feat[masked], seq_label_feat[masked])
+    return loss
+
+
+def mlm_loss(input_processor, attetnion_net, obses):
+    assert hasattr(input_processor, "encode_obs")
+    # obses.shape = [mlm_bsz, mlm_length, num_agents, ...]
+
+    mlm_agents = attetnion_net.mlm_agents
+    mlm_ratio = attetnion_net.mlm_ratio
+    mlm_bsz, mlm_length, num_agents, *img_shape = list(obses.shape)
+
+    # build label
+    with torch.no_grad():
+        aug_obses = attetnion_net.transformation(obses.flatten(0, 2))
+    aug_obses = aug_obses.view(mlm_bsz, mlm_length, num_agents, *img_shape)
+    if mlm_length > 1 and mlm_agents > 1:
+        aug_obses = aug_obses.transpose(1, 2).flatten(0, 2)
+        shp = (mlm_bsz, mlm_length * mlm_agents)
+    elif mlm_length == 1 and mlm_agents > 1:
+        aug_obses = aug_obses.flatten(0, 2)
+        shp = (mlm_bsz, mlm_agents)
+    elif mlm_length > 1 and mlm_agents == 1:
+        aug_obses = aug_obses.transpose(1, 2).flatten(0, 2)
+        shp = (mlm_bsz * mlm_agents, mlm_length)
+    else:
+        raise ValueError("mlm_length * mlm_agents must be > 1")
+    seq_label_feat = input_processor.encode_obs(aug_obses)
+    seq_label_feat = seq_label_feat.view(*shp, -1)
+    feat_dim = seq_label_feat.shape[-1]
+
+    # build mlm outputs
+    aug_obses = obses
+    if mlm_length > 1:
+        aug_obses = aug_obses.transpose(1, 2)
+        masked = torch.zeros((mlm_bsz, num_agents, mlm_length), dtype=torch.bool)
+        for i in range(mlm_bsz):
+            for row in range(num_agents):
+                for col in range(mlm_length):
+                    if random.random() < mlm_ratio:
+                        aug_obses[i, row, col] = 0
+                        masked[i, row, col] = True
+        if mlm_agents == 1:
+            aug_obses = aug_obses.flatten(0, 1)
+            masked = masked.flatten(0, 1)
+        else:
+            aug_obses = aug_obses.flatten(1, 2)
+            masked = masked.flatten(1, 2)
+    elif mlm_length == 1 and mlm_agents > 1:
+        aug_obses = aug_obses.flatten(1, 2)
+        masked = torch.zeros((mlm_bsz, num_agents), dtype=torch.bool)
+        for j in range(mlm_bsz):
+            masked_agent_id = np.random.choice(num_agents)
+            for i in range(num_agents):
+                if i == masked_agent_id:
+                    aug_obses[j, i] = 0
+                    masked[j, i] = True
+    shp = aug_obses.shape
+    with torch.no_grad():
+        aug_obses = attetnion_net.transformation(aug_obses.flatten(0, 1))
+    seq_feat = input_processor.encode_obs(aug_obses)
+    seq_feat = seq_feat.view(*shp[:2], feat_dim)
+    seq_feat = attetnion_net(seq_feat)
+
+    # mse loss
+    loss = F.mse_loss(seq_feat[masked], seq_label_feat[masked])
+    return loss

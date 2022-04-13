@@ -6,3 +6,4 @@ amlt/
 .amltconfig
 .amltignore
 .vscode
+outputs/

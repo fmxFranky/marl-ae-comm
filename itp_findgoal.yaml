@@ -26,10 +26,9 @@ search:
     aml_mpirun:
       process_count_per_node: 0
     command:
-      - python ./marl-grid/find-goal/train_ae.py 
-        --set num_workers 16 env_cfg.comm_len 10 env_cfg.seed {seed}
-        use_wandb True wandb_project_name marl-ae-comm ae_type {ae_type}
-        --gpu 0 1 2 3
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded={mlm_encoded}
     submit_args:
       env:
         AMLT_NO_TENSORBOARD_PATCHING: true
@@ -38,9 +37,9 @@ search:
   type: grid
   max_trials: 16
   params:
-    - name: ae_type
+    - name: mlm_encoded
       spec: discrete
-      values: ["attn", "masked_attn"]
+      values: [true, false]
     - name: seed
       spec: discrete
       values: [1, 2, 3, 4, 5]

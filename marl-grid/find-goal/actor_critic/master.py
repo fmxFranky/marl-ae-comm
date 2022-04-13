@@ -23,6 +23,7 @@ class Master(object):
     def __init__(
         self,
         net,
+        attention_net,
         opt,
         global_iter,
         global_done,
@@ -35,8 +36,11 @@ class Master(object):
         self.done = global_done
         self.max_iteration = max_iteration
         self.net = net
+        self.attention_net = attention_net
         self.opt = opt
         self.net.share_memory()
+        if attention_net is not None:
+            self.attention_net.share_memory()
         self.writer_dir = writer_dir
 
     def init_tensorboard(self):
@@ -84,7 +88,6 @@ class Master(object):
             self.iter.value += 1
 
             if self.iter.value % 100 == 0:
-
                 if progress_str is not None:
                     print(
                         "[{}/{}] {}".format(

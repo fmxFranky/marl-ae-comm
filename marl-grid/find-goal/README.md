@@ -16,19 +16,19 @@ pip install -r requirements.txt
 To train the models in the paper, run the following commands:
 ```train
 # no-comm (baseline)
-python train.py --set num_workers 8 --gpu 0
+python train.py num_workers=8 gpu=[0]
 
 # rl-comm (baseline)
-python train.py --set num_workers 8 env_cfg.comm_len 10 --gpu 0
+python train.py num_workers=8 env_cfg.comm_len=10 gpu=[0]
 
 # ae-rl-comm (baseline)
-python train_ae.py --set num_workers 8 env_cfg.comm_len 10 ae_type 'fc' --gpu 0
+python train.py -num_workers=8 env_cfg.comm_len=10 ae_type='fc' gpu=[0]
 
 # ae-comm
-python train_ae.py --set num_workers 8 env_cfg.comm_len 10 --gpu 0
+python train.py -num_workers=8 env_cfg.comm_len=10 ae_type='' gpu=[0]
 ```
 
-Videos, tensorboard logs, and checkpoints generated during training are saved in `./runs` by default.
+Videos, tensorboard logs, and checkpoints generated during training are saved in `./runs/${%Y-%m-%d}/${%H-%M-%S}` by default.
 
 ## Code layout
 
