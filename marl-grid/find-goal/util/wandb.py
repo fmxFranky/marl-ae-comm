@@ -1,6 +1,6 @@
 import torch.multiprocessing as mp
 import wandb
-
+import os
 
 class WandbLoggingProcess(mp.Process):
     def __init__(self, master, save_dir_fmt, log_queue, *args, **kwargs):
@@ -12,6 +12,7 @@ class WandbLoggingProcess(mp.Process):
         self.kwargs = kwargs
 
     def run(self):
+        os.makedirs(self.save_dir_fmt, exist_ok=True)
         wandb.init(*self.args, **self.kwargs)
         # wandb.run.log_code(
         #     osp.abspath(osp.join(osp.abspath(__file__), "../..")),
