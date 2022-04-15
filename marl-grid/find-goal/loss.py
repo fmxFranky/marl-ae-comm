@@ -177,13 +177,13 @@ def mlm_loss(input_processor, attetnion_net, obses):
     aug_obses = aug_obses.view(mlm_bsz, mlm_length, num_agents, *img_shape)
     if mlm_length > 1 and mlm_agents > 1:
         aug_obses = aug_obses.transpose(1, 2).flatten(0, 2)
-        shp = (mlm_bsz, mlm_length * mlm_agents)
+        shp = (mlm_bsz, mlm_length * num_agents)
     elif mlm_length == 1 and mlm_agents > 1:
         aug_obses = aug_obses.flatten(0, 2)
         shp = (mlm_bsz, mlm_agents)
     elif mlm_length > 1 and mlm_agents == 1:
         aug_obses = aug_obses.transpose(1, 2).flatten(0, 2)
-        shp = (mlm_bsz * mlm_agents, mlm_length)
+        shp = (mlm_bsz * num_agents, mlm_length)
     else:
         raise ValueError("mlm_length * mlm_agents must be > 1")
     seq_label_feat = input_processor.encode_obs(aug_obses)
