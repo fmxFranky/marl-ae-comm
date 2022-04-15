@@ -1,6 +1,8 @@
+import os
+
 import torch.multiprocessing as mp
 import wandb
-import os
+
 
 class WandbLoggingProcess(mp.Process):
     def __init__(self, master, save_dir_fmt, log_queue, *args, **kwargs):

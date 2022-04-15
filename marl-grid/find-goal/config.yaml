@@ -2,7 +2,7 @@ env_cfg:
   active_after_done: false
   can_overlap: false
   clutter_density: 0.15
-  comm_len: 0
+  comm_len: 10
   # if False, use continuous communication
   discrete_comm: true
   discrete_position: true
@@ -22,7 +22,7 @@ env_cfg:
   observe_self_env_act: false
   observe_self_position: true
   observe_t: false
-  seed: 1
+  seed: ${seed}
   # update env policy / comm policy using only env reward / team reward
   separate_rew_more: false
   team_reward_freq: none
@@ -65,12 +65,12 @@ img_feat_dim: 64
 comm_vf: false
 
 # auxilary task
-mlm_agents: 3
+mlm_agents: ${env_cfg.num_agents}
 mlm_bsz: 64
 mlm_encoded: true
 mlm_length: 5
 mlm_loss_k: 1.0
-mlm_ratio: 0.5
+mlm_ratio: 0.25
 mlm_rb_size: 100000
 
 # eval configs
@@ -87,12 +87,7 @@ gpu:
 id: ""
 exp_name: null
 seed: 1
-num_workers: 1
+num_workers: 4
 run_dir: ""
 use_wandb: false
 wandb_project_name: marl-ae-comm
-
-hydra:
-  job:
-    env_set:
-      OMP_NUM_THREADS: "1"

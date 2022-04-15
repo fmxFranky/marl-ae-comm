@@ -28,19 +28,55 @@ search:
     command:
       - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
         num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
-        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded={mlm_encoded}
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_agents=1 mlm_length=16 mlm_ratio=0.25
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_agents=1 mlm_length=32 mlm_ratio=0.25
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_length==1
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_length=5 mlm_ratio=0.25
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_length=10 mlm_ratio=0.25
+      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        num_workers=16 env_cfg.comm_len=10 seed={seed} algo=ae-comm
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=false
     submit_args:
       env:
         AMLT_NO_TENSORBOARD_PATCHING: true
+        MKL_THREADING_LAYER: GNU
+        OMP_NUM_THREADS: 1
       container_args:
-        shm_size: 64g
+        shm_size: 128g
   type: grid
-  max_trials: 16
+  max_trials: 5
   params:
-    - name: mlm_encoded
-      spec: discrete
-      values: [true, false]
     - name: seed
       spec: discrete
       values: [1, 2, 3, 4, 5]
-    
+# for testing
+# jobs:
+#   - name: test
+#     sku: G1
+#     aml_mpirun:
+#       process_count_per_node: 0
+#     command:
+#       - python ./marl-grid/find-goal/train.py gpu=[0]
+#         num_workers=4 env_cfg.comm_len=10 seed=123 algo=ae-comm
+#         use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+#         mlm_agents=1 mlm_length=16 mlm_ratio=0.25
+#     submit_args:
+#       env:
+#         AMLT_NO_TENSORBOARD_PATCHING: true
+#         MKL_THREADING_LAYER: GNU
+#         OMP_NUM_THREADS: 1
+#       container_args:
+#         shm_size: 64g

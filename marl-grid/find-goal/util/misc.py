@@ -42,13 +42,13 @@ def set_seed_everywhere(seed):
 
 
 def set_config(cfg):
-    cfg.env_cfg.seed = cfg.seed
     cfg.env_cfg.env_name = get_env_name(cfg.env_cfg)
 
     # automatically generate exp name based on configs
     curr_time = str(datetime.datetime.now())[:16].replace(" ", "_")
 
     id_args = [
+        ["algo", cfg.algo],
         ["seed", cfg.env_cfg.seed],
         ["lr", cfg.lr],
         ["tmax", cfg.tmax],

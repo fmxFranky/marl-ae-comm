@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import os
 import os.path as osp
 
 import hydra
@@ -8,7 +9,7 @@ import torch.multiprocessing as mp
 from actor_critic import Evaluator, Master, Worker, WorkerAE
 from envs.environments import make_environment
 from model import AENetwork, AttentionModule, HardSharedNetwork, RichSharedNetwork
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from util.misc import check_config, set_config, set_seed_everywhere
 from util.shared_opt import SharedAdam
 from util.wandb import WandbLoggingProcess
@@ -20,7 +21,7 @@ def main(cfg: DictConfig):
     set_config(cfg)
     set_seed_everywhere(cfg.seed)
 
-    save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}", cfg.algo)
+    save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
 
     # (1) create environment
@@ -119,7 +120,7 @@ def main(cfg: DictConfig):
             name=cfg.exp_name,
             project=cfg.wandb_project_name,
             dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
-            config=cfg,
+            config=OmegaConf.to_object(cfg),
         )
         wandb_logger.start()
 
@@ -194,4 +195,5 @@ if __name__ == "__main__":
     # (0) args and steps to make this work.
     # Disable the python spawned processes from using multiple threads.
     mp.set_start_method("spawn", force=True)
+    os.environ["OMP_NUM_THREADS"] = "1"
     main()
