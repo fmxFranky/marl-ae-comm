@@ -5,7 +5,7 @@ from collections import deque
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-from loss import policy_gradient_loss
+from loss import mlm_loss, policy_gradient_loss
 from util import ops
 from util.decorator import within_cuda_device
 from util.misc import check_done
@@ -37,6 +37,7 @@ class Worker(mp.Process):
         self,
         master,
         net,
+        attention_net,
         env,
         worker_id,
         gpu_id=0,
@@ -46,12 +47,19 @@ class Worker(mp.Process):
         tau=1.0,
         num_acts=1,
         anneal_comm_rew=False,
+        mlm_encoded=False,
+        mlm_rb_size=int(1e5),
+        mlm_bsz=64,
+        mlm_length=10,
+        mlm_loss_k=0.1,
         log_queue=None,
+        **kwargs,
     ):
         super().__init__()
 
         self.worker_id = worker_id
         self.net = net
+        self.attention_net = attention_net
         self.env = env
         self.master = master
         self.t_max = t_max
@@ -60,10 +68,17 @@ class Worker(mp.Process):
         self.tau = tau
         self.gpu_id = gpu_id
         self.reward_log = deque(maxlen=5)  # track last 5 finished rewards
-        self.pfmt = "policy loss: {} value loss: {} " + "entropy loss: {} reward: {}"
+        self.pfmt = (
+            "policy loss: {} value loss: {} entropy loss: {} reward: {} mlm_loss: {}"
+        )
         self.agents = [f"agent_{i}" for i in range(self.env.num_agents)]
         self.num_acts = num_acts
         self.anneal_comm_rew = anneal_comm_rew
+        self.mlm_encoded = mlm_encoded
+        self.mlm_rb_size = mlm_rb_size
+        self.mlm_bsz = mlm_bsz
+        self.mlm_length = mlm_length
+        self.mlm_loss_k = mlm_loss_k
         self.log_queue = log_queue
 
     @within_cuda_device
@@ -86,6 +101,23 @@ class Worker(mp.Process):
         trajectory = [[] for _ in range(self.num_acts)]
 
         while not check_done(done) and len(trajectory[0]) < self.t_max:
+            if self.mlm_encoded:
+                # get the encoded representation of the current state
+                np.copyto(
+                    self.obs_buffer[self.mlm_rb_idx],
+                    torch.cat(
+                        [
+                            state_var[f"agent_{i}"]["pov"]
+                            for i in range(self.env.num_agents)
+                        ],
+                        dim=0,
+                    )
+                    .cpu()
+                    .numpy(),
+                )
+                self.mlm_rb_idx = (self.mlm_rb_idx + 1) % self.mlm_rb_size
+                self.mlm_rb_full = self.mlm_rb_full or self.mlm_rb_idx == 0
+
             plogit, value, hidden_state = self.net(state_var, hidden_state)
             action, _, _ = self.net.take_action(plogit)
             state, reward, done, info = self.env.step(action)
@@ -131,6 +163,13 @@ class Worker(mp.Process):
         self.master.init_tensorboard()
         done = True
         reward_log = 0.0
+
+        if self.mlm_encoded:
+            shp = list(ops.to_state_var(self.env.reset())["agent_0"]["pov"].shape)
+            shp[0] *= self.env.num_agents
+            self.obs_buffer = np.empty([self.mlm_rb_size, *shp], dtype=np.float32)
+            self.mlm_rb_idx = 0
+            self.mlm_rb_full = False
 
         while not self.master.is_done():
             # synchronize network parameters
@@ -225,6 +264,21 @@ class Worker(mp.Process):
                     # compute backward locally
                     loss.backward(retain_graph=True)
 
+            # auxilary task
+            if self.mlm_encoded:
+                idxs = np.random.randint(
+                    0,
+                    self.mlm_rb_size - self.mlm_length
+                    if self.mlm_rb_full
+                    else self.mlm_rb_idx - self.mlm_length,
+                    size=self.mlm_bsz,
+                ).reshape(-1, 1)
+                step = np.arange(self.mlm_length).reshape(1, -1)
+                idxs = idxs + step
+                obses = torch.from_numpy(self.obs_buffer[idxs]).cuda()
+                al = mlm_loss(self.net.input_processor, self.attention_net, obses)
+                (self.mlm_loss_k * al).backward(retain_graph=True)
+
             # log training info to tensorboard
             if self.worker_id == 0:
                 log_dict = {}
@@ -240,7 +294,8 @@ class Worker(mp.Process):
                     log_dict[f"policy_loss/{act}"] = np.mean(all_pls[act_id])
                     log_dict[f"value_loss/{act}"] = np.mean(all_vls[act_id])
                     log_dict[f"entropy/{act}"] = np.mean(all_els[act_id])
-
+                if self.mlm_encoded:
+                    log_dict["mlm_loss"] = al.item()
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
                 if self.log_queue:
@@ -253,6 +308,7 @@ class Worker(mp.Process):
                 np.around(np.mean(all_vls, axis=-1), decimals=5),
                 np.around(np.mean(all_els, axis=-1), decimals=5),
                 np.around(np.mean(self.reward_log), decimals=2),
+                np.around(al.item(), decimals=5) if self.mlm_encoded else np.nan,
             )
 
             self.master.apply_gradients(self.net, loss)

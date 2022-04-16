@@ -1,5 +1,81 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import datetime
+import random
+import warnings
+
+import numpy as np
+import torch
+from envs.grid_world_environment import get_env_name
+
+
+def check_config(cfg):
+    assert not (cfg.env_cfg.num_adversaries > 0 and cfg.env_cfg.num_blind_agents > 0)
+
+    if (
+        cfg.env_cfg.observe_position
+        or cfg.env_cfg.observe_done
+        or cfg.env_cfg.observe_self_position
+    ):
+        if cfg.env_cfg.observation_style != "dict":
+            cprint("AUTO: correcting observation_style to _dict_", "r")
+            cfg.env_cfg.observation_style = "dict"
+
+    assert cfg.env_cfg.num_blind_agents <= cfg.env_cfg.num_agents
+    assert cfg.env_cfg.num_adversaries == 0
+    if cfg.env_cfg.active_after_done and cfg.mask:
+        raise ValueError("active_after_done and mask cannot both be True")
+
+    if cfg.env_cfg.observe_position and cfg.env_cfg.observe_self_position:
+        raise ValueError(
+            "observe_position and observe_self_position cannot " "both be True"
+        )
+
+
+def set_seed_everywhere(seed):
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+def set_config(cfg):
+    cfg.env_cfg.env_name = get_env_name(cfg.env_cfg)
+
+    # automatically generate exp name based on configs
+    curr_time = str(datetime.datetime.now())[:16].replace(" ", "_")
+
+    id_args = [
+        ["seed", cfg.env_cfg.seed],
+        ["lr", cfg.lr],
+        ["tmax", cfg.tmax],
+        ["workers", cfg.num_workers],
+        ["ms", cfg.env_cfg.max_steps],
+        ["ae_type", cfg.ae_type],
+    ]
+
+    if cfg.comm_vf:
+        id_args += [["commvf", "True"]]
+
+    if cfg.ae_pg:
+        id_args += [["ae_pg", cfg.ae_pg]]
+
+    if cfg.img_feat_dim != 64:
+        id_args += [["imgdim", cfg.img_feat_dim]]
+
+    cfg_id = "_".join([f"{n}-{v}" for n, v in id_args])
+
+    if cfg.id:
+        cfg_id = "{}_{}".format(cfg.id, cfg_id)
+
+    if eval:
+        cfg_id += "_eval"
+
+    exp_name = "{}/a3c_{}_{}".format(cfg.env_cfg.env_name, cfg_id, curr_time)
+
+    cfg.exp_name = exp_name
+
 
 class bcolors:
     HEADER = "\033[95m"
@@ -29,7 +105,7 @@ def cprint(print_str, color=None, float_num=False, return_str=False):
             warnings.warn("Unknown color {}".format(color))
             if return_str:
                 return print_str
-            print(print_string)
+            print(print_str)
         else:
             c = getattr(bcolors, color)
     e = getattr(bcolors, "end")

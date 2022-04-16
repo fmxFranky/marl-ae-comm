@@ -347,6 +347,7 @@ class InputProcessingModule(nn.Module):
                         img_feat = xs[i - self.num_blind_agents]
 
                     cat_feat[i] = torch.cat([cat_feat[i], img_feat], dim=-1)
+
         return cat_feat
 
     def encode_obs(self, obses):

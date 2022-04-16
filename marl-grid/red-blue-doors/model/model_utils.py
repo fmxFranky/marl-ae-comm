@@ -1,9 +1,13 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from kornia.augmentation import RandomCrop
 from model.init import weights_init
+from util.ops import make_heads, multi_head_attention
 
 
 class LSTMhead(nn.Module):
@@ -356,3 +360,121 @@ class InputProcessingModule(nn.Module):
                     cat_feat[i] = torch.cat([cat_feat[i], img_feat], dim=-1)
 
         return cat_feat
+
+    def encode_obs(self, obses):
+        x = self.conv(obses)
+        return self.img_layer_norm(x) if self.layer_norm else x
+
+
+class Intensity(nn.Module):
+    def __init__(self, scale):
+        super().__init__()
+        self.scale = scale
+
+    def forward(self, x):
+        r = torch.randn((x.size(0), 1, 1, 1), device=x.device)
+        noise = 1.0 + (self.scale * r.clamp(-2.0, 2.0))
+        return x * noise
+
+
+class PositionalEmbedding(nn.Module):
+    def __init__(self, d_model, max_len=128):
+        super().__init__()
+
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model).float()
+        pe.require_grad = False
+
+        position = torch.arange(0, max_len).float().unsqueeze(1)
+        div_term = (
+            torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
+        ).exp()
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
+
+    def forward(self, length):
+        return self.pe[:, :length]
+
+
+class MHAEncoderLayer(torch.nn.Module):
+    def __init__(self, embedding_dim, n_heads=8):
+        super().__init__()
+
+        self.n_heads = n_heads
+
+        self.Wq = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wk = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wv = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.multi_head_combine = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.feed_forward = torch.nn.Sequential(
+            torch.nn.Linear(embedding_dim, embedding_dim * 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(embedding_dim * 4, embedding_dim),
+        )
+        self.norm1 = torch.nn.BatchNorm1d(embedding_dim)
+        self.norm2 = torch.nn.BatchNorm1d(embedding_dim)
+
+    def forward(self, x, mask=None):
+        q = make_heads(self.Wq(x), self.n_heads)
+        k = make_heads(self.Wk(x), self.n_heads)
+        v = make_heads(self.Wv(x), self.n_heads)
+        x = x + self.multi_head_combine(multi_head_attention(q, k, v, mask))
+        x = self.norm1(x.view(-1, x.size(-1))).view(*x.size())
+        x = x + self.feed_forward(x)
+        x = self.norm2(x.view(-1, x.size(-1))).view(*x.size())
+        return x
+
+
+class AttentionModule(nn.Module):
+    def __init__(
+        self,
+        feat_dim,
+        num_agents,
+        obs_space,
+        mlm_bsz,
+        mlm_length,
+        mlm_ratio,
+        mlm_agents,
+    ) -> None:
+        super().__init__()
+        self.feat_dim = feat_dim
+        self.num_agents = num_agents
+        self.obs_space = obs_space
+        self.mlm_bsz = mlm_bsz
+        self.mlm_length = mlm_length
+        self.mlm_ratio = mlm_ratio
+        self.mlm_agents = mlm_agents
+
+        self.position = PositionalEmbedding(feat_dim)
+        self.attn_layers = nn.ModuleList(
+            [MHAEncoderLayer(feat_dim, n_heads=8) for _ in range(6)]
+        )
+        self.segment_embeddings = nn.Embedding(num_agents, feat_dim)
+        self.transformation = nn.Sequential(
+            nn.ReplicationPad2d(4),
+            RandomCrop(obs_space["pov"].shape[:2]),
+            Intensity(scale=0.5),
+        )
+
+    def forward(self, seq_feat):
+        if self.mlm_agents > 1:
+            seg_ids = [[i] * self.mlm_length for i in range(self.mlm_agents)]
+            seg_ids = torch.tensor(seg_ids, dtype=torch.long, device=seq_feat.device)
+            seg_ids = torch.repeat_interleave(seg_ids, self.mlm_bsz, dim=0)
+            segment = self.segment_embeddings(seg_ids).view_as(seq_feat)
+            # for i in range(self.num_agents):
+            #     seq_feat[:, i * mlm_length : (i + 1) * mlm_length] += position
+            seq_feat = seq_feat + segment
+
+        if self.mlm_length > 1:
+            position = self.position(self.mlm_length * self.mlm_agents)
+            seq_feat = seq_feat + position
+
+        for i in range(len(self.attn_layers)):
+            seq_feat = self.attn_layers[i](seq_feat)
+
+        return seq_feat

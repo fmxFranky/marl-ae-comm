@@ -9,7 +9,7 @@ To install MARL grid environment, follow instructions in `../env/README.md`.
 
 To install other requirements:
 ```setup
-pip install -r requirements.txt
+pip install gym==0.23.0 easydict pillow scikit-video scikit-image wandb moviepy matplotlib opencv-python tensorboard hydra-core kornia
 ```
 
 ## Training

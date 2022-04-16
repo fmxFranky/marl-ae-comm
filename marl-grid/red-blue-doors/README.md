@@ -7,28 +7,31 @@ Prerequisite: Python 3.6 or higher
 
 To install MARL grid environment, follow instructions in `../env/README.md`.
 
-To install requirements:
+To install other requirements:
 ```setup
-pip install -r requirements.txt
+pip install gym==0.23.0 easydict pillow scikit-video scikit-image wandb moviepy matplotlib opencv-python tensorboard hydra-core kornia
 ```
 
 ## Training
 To train the models in the paper, run the following commands:
 ```train
 # no-comm (baseline)
-python train.py --set num_workers 8 --gpu 0
+python train.py num_workers=4 gpu=[0]
 
 # rl-comm (baseline)
-python train.py --set num_workers 8 env_cfg.comm_len 10 --gpu 0
+python train.py num_workers=4 env_cfg.comm_len=10 gpu=[0]
 
 # ae-rl-comm (baseline)
-python train_ae.py --set num_workers 8 env_cfg.comm_len 10 ae_type 'fc' --gpu 0
+python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='fc' gpu=[0]
 
-# ae-comm
-python train_ae.py --set num_workers 8 env_cfg.comm_len 10 --gpu 0
+# ae-comm (baseline)
+python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='' gpu=[0]
+
+# ae-comm with auxilary task
+python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='' mlm_encoded=true gpu=[0]
 ```
 
-Videos, tensorboard logs, and checkpoints generated during training are saved in `./runs` by default.
+Videos, tensorboard logs, and checkpoints generated during training are saved in `./outputs/${%Y-%m-%d}/${%H-%M-%S}` by default.
 
 ## Code layout
 

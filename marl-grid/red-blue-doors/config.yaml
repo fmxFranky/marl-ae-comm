@@ -1,0 +1,86 @@
+env_cfg:
+  seed: ${seed}
+  env_name: null
+  env_type: d
+  num_agents: 2
+  num_adversaries: 0
+  max_steps: 2048
+  grid_size: 10
+  observation_style: dict
+  observe_position: false
+  observe_self_position: false
+  observe_self_env_act: false
+  observe_t: false
+  observe_done: false
+  neutral_shape: true
+  can_overlap: false
+  active_after_done: false
+  # allow agents to observe door state and pos
+  observe_door: false
+  discrete_position: true
+  view_size: 5
+  view_tile_size: 8
+  clutter_density: 0.15
+  # if `num_blind_agents` == b, the FIRST b agents do not get image obs
+  num_blind_agents: 0
+  # agent comm length
+  comm_len: 10
+  # if False, use continuous communication
+  discrete_comm: false
+  team_reward_type: none
+  team_reward_freq: none
+  team_reward_multiplier: 1
+
+# async update steps
+tmax: 20
+train_iter: 500000
+lr: 0.0001
+
+# experiment id
+resume_path: ""
+
+# the policy head
+policy: lstm
+model: shared
+share_critic: false
+layer_norm: true
+comm_rnn: true
+
+# mask logits of unavailable actions
+mask: true
+
+# training
+anneal_comm_rew: false
+ae_loss_k: 1.0
+ae_pg: 0
+ae_type: "" # ['', 'fc', 'mlp', 'rfc', 'rmlp']
+img_feat_dim: 64
+comm_vf: false
+
+# auxilary task
+mlm_agents: 2
+mlm_bsz: 64
+mlm_encoded: true
+mlm_length: 8
+mlm_loss_k: 1.0
+mlm_ratio: 0.25
+mlm_rb_size: 100000
+
+# eval configs
+video_save_freq: 20
+ckpt_save_freq: 100
+num_eval_episodes: 10
+num_eval_videos: 10
+eval_ae: false
+
+# experiment configs
+algo: ae-comm # ['no-comm', 'rl-comm', 'ae-rl-comm', 'ae-comm']
+gpu:
+  - 0
+id: ""
+exp_name: null
+seed: 1
+num_workers: 4
+run_dir: ""
+use_wandb: false
+wandb_project_name: marl-ae-comm

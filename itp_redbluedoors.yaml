@@ -26,30 +26,25 @@ search:
     aml_mpirun:
       process_count_per_node: 0
     command:
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+      - python ./marl-grid/red-blue-doors/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
-        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
-        mlm_length==1
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=false
+      - python ./marl-grid/red-blue-doors/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
         use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
         mlm_agents=1 mlm_length=8 mlm_ratio=0.25
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+      - python ./marl-grid/red-blue-doors/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
         use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
-        mlm_length=5 mlm_ratio=0.25
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        mlm_length=4 mlm_ratio=0.25
+      - python ./marl-grid/red-blue-doors/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
-        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=false
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
+        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
+        mlm_length=8 mlm_ratio=0.25
+      - python ./marl-grid/red-blue-doors/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
         use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
         mlm_agents=1 mlm_length=16 mlm_ratio=0.25
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
-        num_workers=16 seed={seed} algo=ae-comm
-        use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
-        mlm_length=10 mlm_ratio=0.25
-
     submit_args:
       env:
         AMLT_NO_TENSORBOARD_PATCHING: true
@@ -70,7 +65,7 @@ search:
 #     aml_mpirun:
 #       process_count_per_node: 0
 #     command:
-#       - python ./marl-grid/find-goal/train.py gpu=[0]
+#       - python ./marl-grid/red-blue-doors/train.py gpu=[0]
 #         num_workers=4 seed=123 algo=ae-comm
 #         use_wandb=true wandb_project_name=marl-ae-comm2 mlm_encoded=true
 #         mlm_agents=1 mlm_length=16 mlm_ratio=0.25

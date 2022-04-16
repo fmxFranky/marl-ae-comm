@@ -115,7 +115,7 @@ def main(cfg: DictConfig):
     if cfg.use_wandb:
         wandb_logger = WandbLoggingProcess(
             master,
-            save_dir_fmt=save_dir_fmt,
+            save_dir_fmt=save_dir_fmt.format(""),
             log_queue=mp.Queue(),
             name=cfg.exp_name,
             project=cfg.wandb_project_name,

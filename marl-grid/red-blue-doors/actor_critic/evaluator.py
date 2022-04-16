@@ -84,7 +84,7 @@ class Evaluator(mp.Process):
             weight_iter = self.master.copy_weights(self.net)
 
             log_dict = defaultdict(int)
-            new_log_dict = defaultdict(int)
+            new_log_dict = {}
 
             for eval_id in range(self.num_eval_episodes):
                 env_copy = copy.deepcopy(self.eval_env[eval_id])

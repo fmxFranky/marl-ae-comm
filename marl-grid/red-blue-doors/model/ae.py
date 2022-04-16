@@ -5,37 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model.a3c_template import A3CTemplate
 from model.init import normalized_columns_initializer
-from model.model_utils import ImgModule, LSTMhead
-from util.ops import make_heads, multi_head_attention
-
-
-class MHAEncoderLayer(torch.nn.Module):
-    def __init__(self, embedding_dim, n_heads=8):
-        super().__init__()
-
-        self.n_heads = n_heads
-
-        self.Wq = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wk = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wv = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.multi_head_combine = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.feed_forward = torch.nn.Sequential(
-            torch.nn.Linear(embedding_dim, embedding_dim * 4),
-            torch.nn.ReLU(),
-            torch.nn.Linear(embedding_dim * 4, embedding_dim),
-        )
-        self.norm1 = torch.nn.BatchNorm1d(embedding_dim)
-        self.norm2 = torch.nn.BatchNorm1d(embedding_dim)
-
-    def forward(self, x, mask=None):
-        q = make_heads(self.Wq(x), self.n_heads)
-        k = make_heads(self.Wk(x), self.n_heads)
-        v = make_heads(self.Wv(x), self.n_heads)
-        x = x + self.multi_head_combine(multi_head_attention(q, k, v, mask))
-        x = self.norm1(x.view(-1, x.size(-1))).view(*x.size())
-        x = x + self.feed_forward(x)
-        x = self.norm2(x.view(-1, x.size(-1))).view(*x.size())
-        return x
+from model.model_utils import ImgModule, LSTMhead, MHAEncoderLayer
 
 
 class STE(torch.autograd.Function):
@@ -169,6 +139,9 @@ class InputProcessor(nn.Module):
                 cat_feat[i] = torch.cat([cat_feat[i], c], dim=-1)
 
         return cat_feat
+
+    def encode_obs(self, obses):
+        return self.img_layer_norm(self.conv(obses))
 
 
 class EncoderDecoder(nn.Module):

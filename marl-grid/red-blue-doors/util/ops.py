@@ -66,6 +66,7 @@ def norm_col_init(weights, std=1.0):
     x *= std / torch.sqrt((x ** 2).sum(1, keepdim=True))
     return x
 
+
 def multi_head_attention(q, k, v, mask=None):
     # q shape = (B, n_heads, n, key_dim)   : n can be either 1 or N
     # k,v shape = (B, n_heads, N, key_dim)
