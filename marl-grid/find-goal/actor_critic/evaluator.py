@@ -81,7 +81,7 @@ class Evaluator(mp.Process):
 
         while not self.master.is_done():
 
-            weight_iter = self.master.copy_weights(self.net)
+            weight_iter = self.master.copy_weights(self.net, None)
 
             log_dict = defaultdict(int)
             new_log_dict = {}

@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
 import os
 import os.path as osp
 
@@ -8,7 +9,13 @@ import torch
 import torch.multiprocessing as mp
 from actor_critic import Evaluator, Master, Worker, WorkerAE
 from envs.environments import make_environment
-from model import AENetwork, AttentionModule, HardSharedNetwork, RichSharedNetwork
+from model import (
+    AENetwork,
+    AttentionModule,
+    HardSharedNetwork,
+    JointPredReprModule,
+    RichSharedNetwork,
+)
 from omegaconf import DictConfig, OmegaConf
 from util.misc import check_config, set_config, set_seed_everywhere
 from util.shared_opt import SharedAdam
@@ -21,15 +28,20 @@ def main(cfg: DictConfig):
     set_config(cfg)
     set_seed_everywhere(cfg.seed)
 
-    save_dir_fmt = osp.join(f"./{cfg.run_dir}", cfg.exp_name + "/{}")
+    if cfg.run_dir is None:
+        save_dir = os.getcwd()
+    elif os.path.isabs(cfg.run_dir):
+        save_dir = cfg.run_dir
+    else:
+        save_dir = os.path.join(hydra.utils.get_original_cwd(), cfg.run_dir)
+    save_dir_fmt = osp.join(save_dir, cfg.exp_name + "/{}")
     print(">> {}".format(cfg.exp_name))
 
     # (1) create environment
-    create_env = lambda: make_environment(cfg.env_cfg)
-    env = create_env()
+    env = make_environment(cfg.env_cfg)
 
     if "ae" in cfg.algo:
-        create_net = lambda: AENetwork(
+        net = AENetwork(
             obs_space=env.observation_space,
             act_space=env.action_space,
             num_agents=cfg.env_cfg.num_agents,
@@ -41,7 +53,7 @@ def main(cfg: DictConfig):
         )
     else:
         if cfg.env_cfg.observation_style == "dict" and cfg.env_cfg.comm_len <= 0:
-            create_net = lambda: HardSharedNetwork(
+            net = HardSharedNetwork(
                 obs_space=env.observation_space,
                 action_size=env.action_space.n,
                 num_agents=cfg.env_cfg.num_agents,
@@ -50,7 +62,7 @@ def main(cfg: DictConfig):
                 layer_norm=cfg.layer_norm,
             )
         elif cfg.env_cfg.observation_style == "dict":
-            create_net = lambda: RichSharedNetwork(
+            net = RichSharedNetwork(
                 obs_space=env.observation_space,
                 act_space=env.action_space,
                 num_agents=cfg.env_cfg.num_agents,
@@ -69,33 +81,35 @@ def main(cfg: DictConfig):
                 )
             )
 
-    create_attention_net = lambda: AttentionModule(
-        feat_dim=cfg.img_feat_dim if "ae" in cfg.algo else 288,
-        num_agents=cfg.env_cfg.num_agents,
-        obs_space=env.observation_space,
-        mlm_bsz=cfg.mlm_bsz,
-        mlm_length=cfg.mlm_length,
-        mlm_ratio=cfg.mlm_ratio,
-        mlm_agents=cfg.mlm_agents,
-    )
-
     # (2) create master network.
     # hogwild-style update will be applied to the master weight.
     master_lock = mp.Lock()
-    net = create_net()
     net.share_memory()
     params = list(net.parameters())
-    if cfg.mlm_encoded:
-        attention_net = create_attention_net()
+    if cfg.add_auxiliary_loss:
+        attention_net = JointPredReprModule(
+            input_processor=net.input_processor,
+            feat_dim=net.comm_ae.preprocessor.feat_dim if "ae" in cfg.algo else 288,
+            num_agents=cfg.env_cfg.num_agents,
+            obs_space=env.observation_space,
+            act_space=env.action_space,
+            jpr_bsz=cfg.aux_bsz,
+            jpr_length=cfg.aux_length,
+            jpr_agents=cfg.aux_agents,
+        )
         attention_net.share_memory()
-        params += list(attention_net.parameters())
-    opt = SharedAdam(params, lr=cfg.lr)
+        aux_opt = SharedAdam(attention_net.parameters(), lr=cfg.aux_lr)
+
+    opt = SharedAdam(net.parameters(), lr=cfg.lr)
 
     if cfg.resume_path:
         ckpt = torch.load(cfg.resume_path)
         global_iter = mp.Value("i", ckpt["iter"])
         net.load_state_dict(ckpt["net"])
         opt.load_state_dict(ckpt["opt"])
+        if cfg.add_auxiliary_loss:
+            attention_net.load_state_dict(ckpt["attention_net"])
+            aux_opt.load_state_dict(ckpt["aux_opt"])
         print(">>>>> Loaded ckpt from iter", ckpt["iter"])
     else:
         global_iter = mp.Value("i", 0)
@@ -103,11 +117,14 @@ def main(cfg: DictConfig):
 
     master = Master(
         net,
-        attention_net if cfg.mlm_encoded else None,
+        attention_net if cfg.add_auxiliary_loss else None,
         opt,
+        aux_opt if cfg.add_auxiliary_loss else None,
         global_iter,
         global_done,
         master_lock,
+        momentum_update_freq=cfg.momentum_update_freq,
+        momentum_tau=cfg.momentum_tau,
         writer_dir=save_dir_fmt.format("tb"),
         max_iteration=cfg.train_iter,
     )
@@ -119,8 +136,9 @@ def main(cfg: DictConfig):
             log_queue=mp.Queue(),
             name=cfg.exp_name,
             project=cfg.wandb_project_name,
-            dir=osp.join(f"./{cfg.run_dir}", cfg.exp_name),
+            dir=save_dir_fmt.format(""),
             config=OmegaConf.to_object(cfg),
+            notes=cfg.get("wandb_notes", None),
         )
         wandb_logger.start()
 
@@ -138,19 +156,21 @@ def main(cfg: DictConfig):
             workers += [
                 WorkerInstance(
                     master,
-                    create_net().cuda(),
-                    create_attention_net().cuda() if cfg.mlm_encoded is True else None,
-                    create_env(),
+                    copy.deepcopy(net).cuda(),
+                    copy.deepcopy(attention_net).cuda()
+                    if cfg.add_auxiliary_loss is True
+                    else None,
+                    copy.deepcopy(env),
                     worker_id=worker_id,
                     gpu_id=gpu_id,
                     num_acts=num_acts,
                     anneal_comm_rew=cfg.anneal_comm_rew,
                     ae_loss_k=cfg.ae_loss_k,
-                    mlm_encoded=cfg.mlm_encoded,
-                    mlm_rb_size=cfg.mlm_rb_size,
-                    mlm_bsz=cfg.mlm_bsz,
-                    mlm_length=cfg.mlm_length,
-                    mlm_loss_k=cfg.mlm_loss_k,
+                    add_auxiliary_loss=cfg.add_auxiliary_loss,
+                    aux_rb_size=cfg.aux_rb_size,
+                    aux_bsz=cfg.aux_bsz,
+                    aux_length=cfg.aux_length,
+                    aux_loss_k=cfg.aux_loss_k,
                     log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
                 ),
             ]
@@ -161,8 +181,8 @@ def main(cfg: DictConfig):
     with torch.cuda.device(eval_gpu_id):
         evaluator = Evaluator(
             master,
-            create_net().cuda(),
-            create_env(),
+            copy.deepcopy(net).cuda(),
+            copy.deepcopy(env),
             save_dir_fmt=save_dir_fmt,
             gpu_id=eval_gpu_id,
             sleep_duration=10,
@@ -192,7 +212,7 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    # (0) args and steps to make this work.
+    # (0) cfg and steps to make this work.
     # Disable the python spawned processes from using multiple threads.
     mp.set_start_method("spawn", force=True)
     os.environ["OMP_NUM_THREADS"] = "1"

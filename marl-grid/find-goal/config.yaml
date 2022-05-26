@@ -65,13 +65,16 @@ img_feat_dim: 64
 comm_vf: false
 
 # auxilary task
-mlm_agents: ${env_cfg.num_agents}
-mlm_bsz: 64
-mlm_encoded: true
-mlm_length: 5
-mlm_loss_k: 1.0
-mlm_ratio: 0.25
-mlm_rb_size: 100000
+aux_agents: ${env_cfg.num_agents}
+aux_bsz: 64
+add_auxiliary_loss: true
+aux_length: 8
+aux_loss_k: 1.0
+aux_ratio: 0.25
+aux_rb_size: 100000
+momentum_update_freq: 4
+momentum_tau: 0.05
+aux_lr: 0.00001
 
 # eval configs
 video_save_freq: 20
@@ -88,6 +91,6 @@ id: ""
 exp_name: null
 seed: 1
 num_workers: 4
-run_dir: ""
+run_dir: ./runs
 use_wandb: false
 wandb_project_name: marl-ae-comm

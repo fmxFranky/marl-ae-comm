@@ -23,7 +23,7 @@ class WandbLoggingProcess(mp.Process):
         while True:
             log_dict = self.log_queue.get(block=True)
             if isinstance(log_dict, dict):
-                wandb.log({**log_dict, "queue_size": self.log_queue.qsize()})
+                wandb.log(log_dict)
             else:
                 break
         # base_path = "/".join(self.save_dir_fmt.split("/")[:-1])

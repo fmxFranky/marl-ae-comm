@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import torch
+import util.ops as ops
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -25,22 +26,29 @@ class Master(object):
         net,
         attention_net,
         opt,
+        aux_opt,
         global_iter,
         global_done,
         master_lock,
         writer_dir,
+        momentum_update_freq=2,
+        momentum_tau=0.05,
         max_iteration=100,
     ):
         self.lock = master_lock
         self.iter = global_iter
         self.done = global_done
         self.max_iteration = max_iteration
+        self.momentum_update_freq = momentum_update_freq
+        self.momentum_tau = momentum_tau
         self.net = net
         self.attention_net = attention_net
         self.opt = opt
-        self.net.share_memory()
+        self.aux_opt = aux_opt
         if attention_net is not None:
+            self.attention_net.input_processor = self.net.input_processor
             self.attention_net.share_memory()
+        self.net.share_memory()
         self.writer_dir = writer_dir
 
     def init_tensorboard(self):
@@ -50,25 +58,51 @@ class Master(object):
                 self.writer = SummaryWriter(self.writer_dir)
         return
 
-    def copy_weights(self, net, with_lock=False):
+    def copy_weights(self, net, attention_net, with_lock=False):
         """ copy weight from master """
 
         if with_lock:
             with self.lock:
                 for p, mp in zip(net.parameters(), self.net.parameters()):
                     p.data.copy_(mp.data)
+                if attention_net is not None:
+                    for p, mp in zip(
+                        attention_net.parameters(), self.attention_net.parameters()
+                    ):
+                        p.data.copy_(mp.data)
             return self.iter.value
         else:
             for p, mp in zip(net.parameters(), self.net.parameters()):
                 p.data.copy_(mp.data)
+            if attention_net is not None:
+                for p, mp in zip(
+                    attention_net.parameters(), self.attention_net.parameters()
+                ):
+                    p.data.copy_(mp.data)
             return self.iter.value
+
+    def _apply_aux_gradients(self, attention_net):
+        # backward prop and clip gradients
+        self.aux_opt.zero_grad()
+        torch.nn.utils.clip_grad_norm_(attention_net.parameters(), 10.0)
+        for p, mp in zip(attention_net.parameters(), self.attention_net.parameters()):
+            if p.grad is not None:
+                mp.grad = p.grad.cpu()
+        self.aux_opt.step()
+
+    def apply_aux_gradients(self, attention_net, with_lock=False):
+        """ apply gradient to the master network """
+        if with_lock:
+            with self.lock:
+                self._apply_aux_gradients(attention_net)
+        else:
+            self._apply_aux_gradients(attention_net)
+        return
 
     def _apply_gradients(self, net):
         # backward prop and clip gradients
         self.opt.zero_grad()
-
         torch.nn.utils.clip_grad_norm_(net.parameters(), 40.0)
-
         for p, mp in zip(net.parameters(), self.net.parameters()):
             if p.grad is not None:
                 mp.grad = p.grad.cpu()
@@ -81,6 +115,37 @@ class Master(object):
                 self._apply_gradients(net)
         else:
             self._apply_gradients(net)
+        return
+
+    def momentum_update(self, with_lock=False):
+        if self.attention_net is None:
+            return
+        with self.iter.get_lock():
+            if self.iter.value % self.momentum_update_freq != 0:
+                return
+        if with_lock:
+            with self.lock:
+                ops.soft_update_params(
+                    self.attention_net.input_processor,
+                    self.attention_net.target_input_processor,
+                    self.momentum_tau,
+                )
+                ops.soft_update_params(
+                    self.attention_net.projector,
+                    self.attention_net.target_projector,
+                    self.momentum_tau,
+                )
+        else:
+            ops.soft_update_params(
+                self.attention_net.input_processor,
+                self.attention_net.target_input_processor,
+                self.momentum_tau,
+            )
+            ops.soft_update_params(
+                self.attention_net.projector,
+                self.attention_net.target_projector,
+                self.momentum_tau,
+            )
         return
 
     def increment(self, progress_str=None):

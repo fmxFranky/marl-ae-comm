@@ -157,3 +157,41 @@ def mlm_loss(input_processor, attetnion_net, obses):
     # mse loss
     loss = F.mse_loss(seq_feat[masked], seq_label_feat[masked])
     return loss
+
+
+def jpr_loss(jpr_net, temporal_inputs, jumps=1):
+    assert jumps == 1 or jumps == jpr_net.jpr_length
+    latents = jpr_net(temporal_inputs[:-1]).flatten(0, 1)
+    latents = jpr_net.projector(latents)
+    latents = jpr_net.predictor(latents)
+    latents = latents.view(jpr_net.jpr_bsz, -1, jpr_net.feat_dim)
+
+    with torch.no_grad():
+        target_latents = jpr_net.encode(temporal_inputs[1:], transform=True, ema=True)
+        target_latents = torch.cat(target_latents, dim=1).flatten(0, 1)
+        target_latents = jpr_net.target_projector(target_latents)
+        target_latents = target_latents.view(jpr_net.jpr_bsz, -1, jpr_net.feat_dim)
+
+    if jpr_net.jpr_agents == 1:
+        latents = latents.view(
+            jpr_net.jpr_bsz, jpr_net.num_agents, jpr_net.jpr_length, -1
+        ).flatten(0, 1)
+        target_latents = target_latents.view(
+            jpr_net.jpr_bsz, jpr_net.num_agents, jpr_net.jpr_length, -1
+        ).flatten(0, 1)
+
+    latents = latents[..., ::jumps, :]
+    target_latents = target_latents[..., ::jumps, :]
+
+    loss = (
+        F.mse_loss(
+            F.normalize(latents, dim=-1, p=2.0, eps=1e-3),
+            F.normalize(target_latents, dim=-1, p=2.0, eps=1e-3),
+            reduction="none",
+        )
+        .sum(dim=-1)
+        .mean(1)
+        .mean(0)
+    )
+
+    return loss

@@ -5,7 +5,9 @@ from collections import deque
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-from loss import mlm_loss, policy_gradient_loss
+import torch.nn.functional as F
+from loss import jpr_loss, mlm_loss, policy_gradient_loss
+from model.model_utils import JointPredReprModule
 from util import ops
 from util.decorator import within_cuda_device
 from util.misc import check_done
@@ -43,11 +45,26 @@ class WorkerAE(mp.Process):
         gamma=0.99,
         tau=1.0,
         ae_loss_k=1.0,
-        mlm_encoded=False,
-        mlm_rb_size=int(1e5),
-        mlm_bsz=64,
-        mlm_length=10,
-        mlm_loss_k=0.1,
+        add_auxiliary_loss=False,
+        aux_task="jpr",
+        aux_loss_k=5.0,
+        aux_agents=1,
+        aux_rb_size=int(1e5),
+        aux_length=8,
+        aux_bsz=64,
+        # # mlm
+        # mlm_encoded=False,
+        # mlm_rb_size=int(1e5),
+        # mlm_bsz=64,
+        # mlm_length=10,
+        # mlm_loss_k=0.1,
+        # # jpr
+        # jpr_encoded=True,
+        # jpr_rb_size=int(1e5),
+        # jpr_bsz=64,
+        # jpr_length=10,
+        # jpr_agents=None,
+        # jpr_loss_k=0.1,
         log_queue=None,
         **kwargs,
     ):
@@ -63,16 +80,43 @@ class WorkerAE(mp.Process):
         self.tau = tau
         self.gpu_id = gpu_id
         self.reward_log = deque(maxlen=5)  # track last 5 finished rewards
-        self.pfmt = "policy loss: {} value loss: {} entropy loss: {} ae loss: {} reward: {} mlm_loss: {}"
+        self.pfmt = "policy loss: {} value loss: {} entropy loss: {} ae loss: {} reward: {} aux_loss: {}"
         self.agents = [f"agent_{i}" for i in range(self.env.num_agents)]
         self.num_acts = 1
         self.ae_loss_k = ae_loss_k
-        self.mlm_encoded = mlm_encoded
-        self.mlm_rb_size = mlm_rb_size
-        self.mlm_bsz = mlm_bsz
-        self.mlm_length = mlm_length
-        self.mlm_loss_k = mlm_loss_k
+        self.add_auxiliary_loss = add_auxiliary_loss
+        self.aux_task = aux_task
+        self.aux_loss_k = aux_loss_k
+        self.aux_agents = aux_agents
+        self.aux_rb_size = aux_rb_size
+        self.aux_length = aux_length
+        self.aux_bsz = aux_bsz
+        assert aux_task in ["mlm", "jpr"]
+        assert aux_agents == 1 or aux_agents == self.env.num_agents
+        # self.mlm_encoded = mlm_encoded
+        # self.mlm_rb_size = mlm_rb_size
+        # self.mlm_bsz = mlm_bsz
+        # self.mlm_length = mlm_length
+        # self.mlm_loss_k = mlm_loss_k
+        # self.jpr_encoded = jpr_encoded
+        # self.jpr_rb_size = jpr_rb_size
+        # self.jpr_bsz = jpr_bsz
+        # self.jpr_length = jpr_length
+        # self.jpr_agents = jpr_agents or self.env.num_agents
+        # self.jpr_loss_k = jpr_loss_k
         self.log_queue = log_queue
+        self.env_action_size = env.action_space[0].n
+        self.obs_keys = list(env.observation_space.spaces.keys())
+        # self.jpr_net = JointPredReprModule(
+        #     input_processor=net.input_processor,
+        #     feat_dim=128,
+        #     num_agents=env.num_agents,
+        #     obs_space=env.observation_space,
+        #     act_space=env.action_space,
+        #     jpr_bsz=jpr_bsz,
+        #     jpr_length=jpr_length,
+        #     jpr_agents=self.jpr_agents,
+        # ).cuda()
 
     @within_cuda_device
     def get_trajectory(self, hidden_state, state_var, done):
@@ -97,23 +141,6 @@ class WorkerAE(mp.Process):
         trajectory = [[] for _ in range(self.num_acts)]
 
         while not check_done(done) and len(trajectory[0]) < self.t_max:
-            if self.mlm_encoded:
-                # get the encoded representation of the current state
-                np.copyto(
-                    self.obs_buffer[self.mlm_rb_idx],
-                    torch.cat(
-                        [
-                            state_var[f"agent_{i}"]["pov"]
-                            for i in range(self.env.num_agents)
-                        ],
-                        dim=0,
-                    )
-                    .cpu()
-                    .numpy(),
-                )
-                self.mlm_rb_idx = (self.mlm_rb_idx + 1) % self.mlm_rb_size
-                self.mlm_rb_full = self.mlm_rb_full or self.mlm_rb_idx == 0
-
             plogit, value, hidden_state, comm_out, comm_ae_loss = self.net(
                 state_var, hidden_state, env_mask_idx=env_mask_idx
             )
@@ -128,6 +155,62 @@ class WorkerAE(mp.Process):
             for agent_id, a in enumerate(self.agents):
                 if info[a]["done"] and env_mask_idx[agent_id] is None:
                     env_mask_idx[agent_id] = [0, 1, 2, 3]
+
+            if self.add_auxiliary_loss:
+                for key in self.obs_keys:
+                    data = [
+                        state_var[f"agent_{i}"][key] for i in range(self.env.num_agents)
+                    ]
+                    data = (
+                        torch.cat(data, dim=0)
+                        if key == "pov"
+                        else torch.stack(data, dim=0)
+                    )
+                    np.copyto(
+                        self.buffer[key][self.aux_rb_idx], data.cpu().numpy(),
+                    )
+                acts = [action[f"agent_{i}"] for i in range(self.env.num_agents)]
+                np.copyto(
+                    self.buffer["act"][self.aux_rb_idx], acts,
+                )
+                self.aux_rb_idx = (self.aux_rb_idx + 1) % self.aux_rb_size
+                self.aux_rb_full = self.aux_rb_full or self.aux_rb_idx == 0
+
+            # if self.mlm_encoded:
+            #     np.copyto(
+            #         self.obs_buffer[self.mlm_rb_idx],
+            #         torch.cat(
+            #             [
+            #                 state_var[f"agent_{i}"]["pov"]
+            #                 for i in range(self.env.num_agents)
+            #             ],
+            #             dim=0,
+            #         )
+            #         .cpu()
+            #         .numpy(),
+            #     )
+            #     self.mlm_rb_idx = (self.mlm_rb_idx + 1) % self.mlm_rb_size
+            #     self.mlm_rb_full = self.mlm_rb_full or self.mlm_rb_idx == 0
+
+            # if self.jpr_encoded:
+            #     for key in self.obs_keys:
+            #         data = [
+            #             state_var[f"agent_{i}"][key] for i in range(self.env.num_agents)
+            #         ]
+            #         data = (
+            #             torch.cat(data, dim=0)
+            #             if key == "pov"
+            #             else torch.stack(data, dim=0)
+            #         )
+            #         np.copyto(
+            #             self.buffer[key][self.jpr_rb_idx], data.cpu().numpy(),
+            #         )
+            #     acts = [action[f"agent_{i}"] for i in range(self.env.num_agents)]
+            #     np.copyto(
+            #         self.buffer["act"][self.jpr_rb_idx], acts,
+            #     )
+            #     self.jpr_rb_idx = (self.jpr_rb_idx + 1) % self.jpr_rb_size
+            #     self.jpr_rb_full = self.jpr_rb_full or self.jpr_rb_idx == 0
 
         # end condition
         if check_done(done):
@@ -158,17 +241,48 @@ class WorkerAE(mp.Process):
         done = True
         reward_log = 0.0
 
-        if self.mlm_encoded:
-            shp = list(ops.to_state_var(self.env.reset())["agent_0"]["pov"].shape)
-            shp[0] *= self.env.num_agents
-            self.obs_buffer = np.empty([self.mlm_rb_size, *shp], dtype=np.float32)
-            self.mlm_rb_idx = 0
-            self.mlm_rb_full = False
+        if self.add_auxiliary_loss:
+            dummy_obs = ops.to_state_var(self.env.reset())["agent_0"]
+            self.buffer = {}
+            for key in self.obs_keys:
+                shp = (
+                    dummy_obs[key].shape if key == "pov" else dummy_obs[key][None].shape
+                )
+                shp = [self.aux_rb_size, shp[0] * self.env.num_agents] + list(shp[1:])
+                self.buffer[key] = np.empty(shp, dtype=np.float32)
+            self.buffer["act"] = np.empty(
+                [self.aux_rb_size, self.env.num_agents], dtype=np.long
+            )
+            self.aux_rb_idx = 0
+            self.aux_rb_full = False
+
+        # if self.mlm_encoded:
+        #     shp = list(ops.to_state_var(self.env.reset())["agent_0"]["pov"].shape)
+        #     shp[0] *= self.env.num_agents
+        #     self.obs_buffer = np.empty([self.mlm_rb_size, *shp], dtype=np.float32)
+        #     self.mlm_rb_idx = 0
+        #     self.mlm_rb_full = False
+
+        # if self.jpr_encoded:
+        #     dummy_obs = ops.to_state_var(self.env.reset())["agent_0"]
+        #     self.buffer = {}
+        #     for key in self.obs_keys:
+        #         shp = (
+        #             dummy_obs[key].shape if key == "pov" else dummy_obs[key][None].shape
+        #         )
+        #         shp = [self.jpr_rb_size, shp[0] * self.env.num_agents] + list(shp[1:])
+        #         self.buffer[key] = np.empty(shp, dtype=np.float32)
+        #     self.buffer["act"] = np.empty(
+        #         [self.jpr_rb_size, self.env.num_agents], dtype=np.long
+        #     )
+        #     self.jpr_rb_idx = 0
+        #     self.jpr_rb_full = False
 
         while not self.master.is_done():
             # synchronize network parameters
-            weight_iter = self.master.copy_weights(self.net)
+            weight_iter = self.master.copy_weights(self.net, self.attention_net)
             self.net.zero_grad()
+            self.attention_net.zero_grad()
 
             # reset environment if new episode
             if check_done(done):
@@ -243,22 +357,86 @@ class WorkerAE(mp.Process):
                     all_els[aid].append(np.mean(els))
 
             # auxilary task
-            if self.mlm_encoded:
+            if self.add_auxiliary_loss:
                 idxs = np.random.randint(
                     0,
-                    self.mlm_rb_size - self.mlm_length
-                    if self.mlm_rb_full
-                    else self.mlm_rb_idx - self.mlm_length,
-                    size=self.mlm_bsz,
+                    self.aux_rb_size - self.aux_length - 1
+                    if self.aux_rb_full
+                    else self.aux_rb_idx - self.aux_length - 1,
+                    size=self.aux_bsz,
                 ).reshape(-1, 1)
-                step = np.arange(self.mlm_length).reshape(1, -1)
+                step = np.arange(self.aux_length + 1).reshape(1, -1)
                 idxs = idxs + step
-                obses = torch.from_numpy(self.obs_buffer[idxs]).cuda()
-                al = mlm_loss(self.net.input_processor, self.attention_net, obses)
-                loss += self.mlm_loss_k * al
+                temporal_samples = [{key: {} for key in self.agents}] * (
+                    self.aux_length + 1
+                )
+                for i in range(self.aux_length + 1):
+                    for j in range(self.env.num_agents):
+                        for key in self.obs_keys:
+                            temporal_samples[i][self.agents[j]][key] = torch.from_numpy(
+                                self.buffer[key][idxs][:, i, j]
+                            ).cuda()
+                        temporal_samples[i][self.agents[j]]["act_onehot"] = (
+                            F.one_hot(
+                                torch.from_numpy(self.buffer["act"][idxs][:, i, j]),
+                                num_classes=self.env_action_size,
+                            )
+                            .cuda()
+                            .float()
+                        )
+                aux_loss = self.aux_loss_k * jpr_loss(
+                    self.attention_net, temporal_samples
+                )
+
+            # if self.mlm_encoded:
+            #     idxs = np.random.randint(
+            #         0,
+            #         self.mlm_rb_size - self.mlm_length
+            #         if self.mlm_rb_full
+            #         else self.mlm_rb_idx - self.mlm_length,
+            #         size=self.mlm_bsz,
+            #     ).reshape(-1, 1)
+            #     step = np.arange(self.mlm_length).reshape(1, -1)
+            #     idxs = idxs + step
+            #     obses = torch.from_numpy(self.obs_buffer[idxs]).cuda()
+            #     al = mlm_loss(self.net.input_processor, self.attention_net, obses)
+            #     loss += self.mlm_loss_k * al
+
+            # if self.jpr_encoded:
+            #     idxs = np.random.randint(
+            #         0,
+            #         self.jpr_rb_size - self.jpr_length - 1
+            #         if self.jpr_rb_full
+            #         else self.jpr_rb_idx - self.jpr_length - 1,
+            #         size=self.jpr_bsz,
+            #     ).reshape(-1, 1)
+            #     step = np.arange(self.jpr_length + 1).reshape(1, -1)
+            #     idxs = idxs + step
+            #     temporal_samples = [{key: {} for key in self.agents}] * (
+            #         self.jpr_length + 1
+            #     )
+            #     for i in range(self.jpr_length + 1):
+            #         for j in range(self.env.num_agents):
+            #             for key in self.obs_keys:
+            #                 temporal_samples[i][self.agents[j]][key] = torch.from_numpy(
+            #                     self.buffer[key][idxs][:, i, j]
+            #                 ).cuda()
+            #             temporal_samples[i][self.agents[j]]["act_onehot"] = (
+            #                 F.one_hot(
+            #                     torch.from_numpy(self.buffer["act"][idxs][:, i, j]),
+            #                     num_classes=self.env_action_size,
+            #                 )
+            #                 .cuda()
+            #                 .float()
+            #             )
 
             # accumulate gradient locally
             loss.backward()
+            self.master.apply_gradients(self.net)
+
+            if self.add_auxiliary_loss:
+                aux_loss.backward()
+                self.master.apply_aux_gradients(self.attention_net)
 
             # log training info to tensorboard
             if self.worker_id == 0:
@@ -276,8 +454,10 @@ class WorkerAE(mp.Process):
                     log_dict[f"value_loss/{act}"] = np.mean(all_vls[act_id])
                     log_dict[f"entropy/{act}"] = np.mean(all_els[act_id])
                 log_dict["ae_loss"] = np.mean(comm_ae_losses)
-                if self.mlm_encoded:
-                    log_dict["mlm_loss"] = al.item()
+                if self.add_auxiliary_loss:
+                    log_dict["aux_loss"] = aux_loss.item()
+                # if self.mlm_encoded:
+                #     log_dict["mlm_loss"] = al.item()
                 for k, v in log_dict.items():
                     self.master.writer.add_scalar(k, v, weight_iter)
                 if self.log_queue:
@@ -291,11 +471,12 @@ class WorkerAE(mp.Process):
                 np.around(np.mean(all_els, axis=-1), decimals=5),
                 np.around(np.mean(comm_ae_losses), decimals=5),
                 np.around(np.mean(self.reward_log), decimals=2),
-                np.around(al.item(), decimals=5) if self.mlm_encoded else np.nan,
+                np.around(aux_loss.item(), decimals=5)
+                if self.add_auxiliary_loss
+                else np.nan,
             )
-
-            self.master.apply_gradients(self.net)
             self.master.increment(progress_str)
+            self.master.momentum_update()
 
         print(f"worker {self.worker_id} is done.")
         return

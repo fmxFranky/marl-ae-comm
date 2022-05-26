@@ -88,3 +88,8 @@ def multi_head_attention(q, k, v, mask=None):
 def make_heads(qkv, n_heads):
     shp = (qkv.size(0), qkv.size(1), n_heads, -1)
     return qkv.reshape(*shp).transpose(1, 2)
+
+
+def soft_update_params(net, target_net, tau):
+    for param, target_param in zip(net.parameters(), target_net.parameters()):
+        target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)

@@ -1,5 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from pickle import PickleBuffer
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -113,13 +115,15 @@ class InputProcessor(nn.Module):
             # concat agent's own position if provided
             if "selfpos" in self.obs_keys:
                 sp = inputs[f"agent_{i}"]["selfpos"].to(torch.int64)  # (2,)
+                if len(sp.shape) == 1:
+                    sp = sp[None]
                 if self.discrete_positions is not None:
-                    spx = F.one_hot(sp[0], num_classes=self.discrete_positions[0])
-                    spy = F.one_hot(sp[1], num_classes=self.discrete_positions[1])
+                    spx = F.one_hot(sp[:, 0], num_classes=self.discrete_positions[0])
+                    spy = F.one_hot(sp[:, 1], num_classes=self.discrete_positions[1])
                     sp = torch.cat([spx, spy], dim=-1).float()
-                    sp = torch.reshape(sp, (1, sum(self.discrete_positions)))
+                    sp = torch.reshape(sp, (-1, sum(self.discrete_positions)))
                 else:
-                    sp = torch.reshape(sp, (1, 2))
+                    sp = torch.reshape(sp, (-1, 2))
                 feats.append(sp)
 
             if len(feats) > 1:

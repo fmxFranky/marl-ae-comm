@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
 import math
 
 import torch
@@ -446,7 +447,7 @@ class AttentionModule(nn.Module):
         self.transformation = nn.Sequential(
             nn.ReplicationPad2d(4),
             RandomCrop(obs_space["pov"].shape[:2]),
-            Intensity(scale=0.5),
+            Intensity(scale=0.05),
         )
 
     def forward(self, seq_feat):
@@ -467,3 +468,129 @@ class AttentionModule(nn.Module):
             seq_feat = self.attn_layers[i](seq_feat)
 
         return seq_feat
+
+
+class JointPredReprModule(nn.Module):
+    def __init__(
+        self,
+        input_processor,
+        feat_dim,
+        num_agents,
+        obs_space,
+        act_space,
+        jpr_bsz,
+        jpr_length,
+        jpr_agents,
+    ) -> None:
+        super().__init__()
+        assert jpr_agents == 1 or jpr_agents == num_agents
+        self.input_processor = input_processor
+        self.target_input_processor = copy.deepcopy(input_processor)
+        self.feat_dim = feat_dim
+        self.num_agents = num_agents
+        self.obs_space = obs_space
+        self.act_space = act_space
+        self.jpr_bsz = jpr_bsz
+        self.jpr_length = jpr_length
+        self.jpr_agents = jpr_agents
+
+        self.position = PositionalEmbedding(feat_dim)
+        self.attn_layers = nn.ModuleList(
+            [MHAEncoderLayer(feat_dim, n_heads=8) for _ in range(4)]
+        )
+        self.segment_embeddings = nn.Embedding(num_agents, feat_dim)
+        self.transform = nn.Sequential(
+            # nn.ReplicationPad2d(4),
+            # RandomCrop(obs_space["pov"].shape[:2]),
+            Intensity(scale=0.05),
+        )
+        self.act_encoder = nn.Linear(act_space[0].n, feat_dim)
+        self.projector = nn.Sequential(
+            nn.Linear(feat_dim, feat_dim * 2),
+            nn.ReLU(),
+            nn.Linear(feat_dim * 2, feat_dim),
+        )
+        self.predictor = nn.Sequential(
+            nn.Linear(feat_dim, feat_dim * 2),
+            nn.ReLU(),
+            nn.Linear(feat_dim * 2, feat_dim),
+        )
+        self.target_projector = nn.Sequential(
+            nn.Linear(feat_dim, feat_dim * 2),
+            nn.ReLU(),
+            nn.Linear(feat_dim * 2, feat_dim),
+        )
+
+        flatten_length = 2 * jpr_length * num_agents
+        mask = torch.zeros(jpr_bsz, flatten_length, flatten_length)
+        for i in range(flatten_length):
+            for j in range(flatten_length):
+                agent_id = [i // (2 * jpr_length), j // (2 * jpr_length)]
+                timestep = [(i % (2 * jpr_length)) // 2, (j % (2 * jpr_length)) // 2]
+                if timestep[0] <= timestep[1]:
+                    if jpr_agents < num_agents and agent_id[0] != agent_id[1]:
+                        mask[:, i, j] = 0.0
+                    else:
+                        mask[:, i, j] = 1.0
+        self.flatten_length = flatten_length
+        self.register_buffer("mask", mask)
+
+    def encode(self, temporal_inputs, transform=True, ema=True):
+        temporal_outputs = []
+        for inputs in temporal_inputs[::-1]:
+            if transform:
+                with torch.no_grad():
+                    for i in range(self.num_agents):
+                        inputs[f"agent_{i}"]["pov"] = self.transform(
+                            inputs[f"agent_{i}"]["pov"]
+                        )
+            if ema:
+                with torch.no_grad():
+                    obs_emb = self.target_input_processor(inputs)
+            else:
+                obs_emb = self.input_processor(inputs)
+            temporal_outputs.append(torch.stack(obs_emb, dim=1))
+        return temporal_outputs
+
+    def forward(self, temporal_inputs):
+        pos_emb = self.position(self.jpr_length).repeat_interleave(self.jpr_bsz, dim=0)
+        x = torch.zeros(
+            self.jpr_bsz, self.jpr_length * self.jpr_agents * 2, self.feat_dim
+        ).to(pos_emb.device)
+
+        obs_temporal_outputs = self.encode(temporal_inputs, transform=True, ema=False)
+        act_temporal_outputs = []
+        for inputs in temporal_inputs:
+            act_onehot = torch.stack(
+                [inputs[f"agent_{i}"]["act_onehot"] for i in range(self.jpr_agents)],
+                dim=1,
+            )
+            # B, N, D
+            act_temporal_outputs.append(self.act_encoder(act_onehot))
+
+        for i in range(self.flatten_length):
+            agent_id = i // (2 * self.jpr_length)
+            timestep = (i % (2 * self.jpr_length)) // 2
+            is_obs = (i % (2 * self.jpr_length)) % 2 == 0
+            if is_obs:
+                x[:, i, :] = (
+                    obs_temporal_outputs[timestep][:, agent_id, :]
+                    + pos_emb[:, timestep]
+                )
+            else:
+                x[:, i, :] = (
+                    act_temporal_outputs[timestep][:, agent_id, :]
+                    + pos_emb[:, timestep]
+                )
+
+        if self.jpr_agents > 1:
+            seg_ids = [[i] * self.jpr_length * 2 for i in range(self.jpr_agents)]
+            seg_ids = torch.tensor(seg_ids, dtype=torch.long, device=pos_emb.device)
+            seg_ids = torch.repeat_interleave(seg_ids[None], self.jpr_bsz, dim=0)
+            segment = self.segment_embeddings(seg_ids).flatten(1, 2)
+            x = x + segment
+
+        for attn_layer in self.attn_layers:
+            x = attn_layer(x, mask=self.mask)
+
+        return x[:, ::2, :]  # B, N*L, D
