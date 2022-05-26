@@ -555,14 +555,14 @@ class JointPredReprModule(nn.Module):
     def forward(self, temporal_inputs):
         pos_emb = self.position(self.jpr_length).repeat_interleave(self.jpr_bsz, dim=0)
         x = torch.zeros(
-            self.jpr_bsz, self.jpr_length * self.jpr_agents * 2, self.feat_dim
+            self.jpr_bsz, self.jpr_length * self.num_agents * 2, self.feat_dim
         ).to(pos_emb.device)
 
         obs_temporal_outputs = self.encode(temporal_inputs, transform=True, ema=False)
         act_temporal_outputs = []
         for inputs in temporal_inputs:
             act_onehot = torch.stack(
-                [inputs[f"agent_{i}"]["act_onehot"] for i in range(self.jpr_agents)],
+                [inputs[f"agent_{i}"]["act_onehot"] for i in range(self.num_agents)],
                 dim=1,
             )
             # B, N, D
