@@ -1,5 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import time
+
 import torch
 import util.ops as ops
 from torch.utils.tensorboard import SummaryWriter
@@ -34,6 +36,7 @@ class Master(object):
         momentum_update_freq=2,
         momentum_tau=0.05,
         max_iteration=100,
+        log_queue=None,
     ):
         self.lock = master_lock
         self.iter = global_iter
@@ -50,6 +53,8 @@ class Master(object):
             self.attention_net.share_memory()
         self.net.share_memory()
         self.writer_dir = writer_dir
+        self.log_queue = log_queue
+        self.start_time = time.time()
 
     def init_tensorboard(self):
         """ initializes tensorboard by the first worker """
@@ -154,18 +159,19 @@ class Master(object):
 
             if self.iter.value % 100 == 0:
                 if progress_str is not None:
-                    print(
-                        "[{}/{}] {}".format(
-                            self.iter.value, self.max_iteration, progress_str
-                        )
-                    )
+                    s = f"[{self.iter.value}/{self.max_iteration}] {progress_str}"
+                    t = f"time pass: {((time.time()-self.start_time)/60):.2f}mins"
+                    if self.log_queue:
+                        self.log_queue.put(f"{s} {t}")
+                    else:
+                        print(f"{s} {t}")
 
                 else:
-                    print(
-                        "[{}/{}] workers are working hard.".format(
-                            self.iter.value, self.max_iteration
-                        )
-                    )
+                    s = f"[{self.iter.value}/{self.max_iteration}] workers are working hard."
+                    if self.log_queue:
+                        self.log_queue.put(s)
+                    else:
+                        print(s)
 
             if self.iter.value > self.max_iteration:
                 self.done.value = 1
@@ -175,11 +181,14 @@ class Master(object):
         return self.done.value
 
     def save_ckpt(self, weight_iter, save_path):
+        ckpt = {
+            "net": self.net.state_dict(),
+            "opt": self.opt.state_dict(),
+            "iter": weight_iter,
+        }
+        if self.attention_net:
+            ckpt["attention_net"] = self.attention_net.state_dict()
+            ckpt["aux_opt"] = self.aux_opt.state_dict()
         torch.save(
-            {
-                "net": self.net.state_dict(),
-                "opt": self.opt.state_dict(),
-                "iter": weight_iter,
-            },
-            save_path,
+            ckpt, save_path,
         )

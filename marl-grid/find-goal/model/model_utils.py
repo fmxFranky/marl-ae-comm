@@ -247,7 +247,12 @@ class InputProcessingModule(nn.Module):
             for i in range(self.num_agents):
                 c.append(inputs[f"agent_{i}"]["comm"])
             c = torch.stack(c, dim=0)
-            c = self.comm(c)
+            if c.dim() > 3:
+                shp = c.shape
+                c = self.comm(c.flatten(0, 1)).view(shp[0], shp[1], -1)
+                c = c.transpose(0, 1)
+            else:
+                c = self.comm(c)
 
         # process (normalized) time if provided
         if "t" in self.obs_keys:
@@ -283,18 +288,23 @@ class InputProcessingModule(nn.Module):
             # concat agent's own position if provided
             if "selfpos" in self.obs_keys:
                 sp = inputs[f"agent_{i}"]["selfpos"].to(torch.int64)  # (2,)
+                if len(sp.shape) == 1:
+                    sp = sp[None]
                 if self.discrete_positions is not None:
-                    spx = F.one_hot(sp[0], num_classes=self.discrete_positions[0])
-                    spy = F.one_hot(sp[1], num_classes=self.discrete_positions[1])
+                    spx = F.one_hot(sp[:, 0], num_classes=self.discrete_positions[0])
+                    spy = F.one_hot(sp[:, 1], num_classes=self.discrete_positions[1])
                     sp = torch.cat([spx, spy], dim=-1).float()
-                    sp = torch.reshape(sp, (1, sum(self.discrete_positions)))
+                    sp = torch.reshape(sp, (-1, sum(self.discrete_positions)))
                 else:
-                    sp = torch.reshape(sp, (1, 2))
+                    sp = torch.reshape(sp, (-1, 2))
                 feats.append(sp)
 
             # concat comm features for each agent if provided
             if "comm" in self.obs_keys:
-                feats.append(c[i : i + 1])
+                if c.dim() > 2:
+                    feats.append(c[:, i, :])
+                else:
+                    feats.append(c[i : i + 1])
 
             if "position" in self.obs_keys and "done" in self.obs_keys:
                 # position
@@ -390,23 +400,23 @@ class PositionalEmbedding(nn.Module):
         return self.pe[:, :length]
 
 
-class MHAEncoderLayer(torch.nn.Module):
+class MHAEncoderLayer(nn.Module):
     def __init__(self, embedding_dim, n_heads=8):
         super().__init__()
 
         self.n_heads = n_heads
 
-        self.Wq = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wk = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.Wv = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-        self.multi_head_combine = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.feed_forward = torch.nn.Sequential(
-            torch.nn.Linear(embedding_dim, embedding_dim * 4),
-            torch.nn.ReLU(),
-            torch.nn.Linear(embedding_dim * 4, embedding_dim),
+        self.Wq = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wk = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.Wv = nn.Linear(embedding_dim, embedding_dim, bias=False)
+        self.multi_head_combine = nn.Linear(embedding_dim, embedding_dim)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim * 4),
+            nn.GELU(),
+            nn.Linear(embedding_dim * 4, embedding_dim),
         )
-        self.norm1 = torch.nn.BatchNorm1d(embedding_dim)
-        self.norm2 = torch.nn.BatchNorm1d(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.norm2 = nn.LayerNorm(embedding_dim)
 
     def forward(self, x, mask=None):
         q = make_heads(self.Wq(x), self.n_heads)
@@ -445,7 +455,7 @@ class AttentionModule(nn.Module):
         )
         self.segment_embeddings = nn.Embedding(num_agents, feat_dim)
         self.transformation = nn.Sequential(
-            nn.ReplicationPad2d(4),
+            nn.ReplicationPad2d(2),
             RandomCrop(obs_space["pov"].shape[:2]),
             Intensity(scale=0.05),
         )
@@ -478,6 +488,8 @@ class JointPredReprModule(nn.Module):
         num_agents,
         obs_space,
         act_space,
+        num_attn_layers,
+        num_attn_heads,
         jpr_bsz,
         jpr_length,
         jpr_agents,
@@ -496,12 +508,15 @@ class JointPredReprModule(nn.Module):
 
         self.position = PositionalEmbedding(feat_dim)
         self.attn_layers = nn.ModuleList(
-            [MHAEncoderLayer(feat_dim, n_heads=8) for _ in range(4)]
+            [
+                MHAEncoderLayer(feat_dim, n_heads=num_attn_heads)
+                for _ in range(num_attn_layers)
+            ]
         )
         self.segment_embeddings = nn.Embedding(num_agents, feat_dim)
         self.transform = nn.Sequential(
-            # nn.ReplicationPad2d(4),
-            # RandomCrop(obs_space["pov"].shape[:2]),
+            nn.ReplicationPad2d(2),
+            RandomCrop(obs_space["pov"].shape[:2]),
             Intensity(scale=0.05),
         )
         self.act_encoder = nn.Linear(act_space[0].n, feat_dim)

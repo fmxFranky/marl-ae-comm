@@ -227,5 +227,9 @@ class Evaluator(mp.Process):
 
             time.sleep(self.sleep_duration)
 
-        print("evaluator is done.")
+        if self.log_queue:
+            self.log_queue.put("evaluator is done.")
+        else:
+            print("evaluator is done.")
+
         return

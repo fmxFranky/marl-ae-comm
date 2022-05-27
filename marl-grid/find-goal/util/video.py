@@ -46,7 +46,7 @@ def make_video(save_path, ims, fps=30, duration=None, verbose=True):
         )
 
     else:
-        raise RunTimeError("unknown file extension")
+        raise RuntimeError("unknown file extension")
 
     if verbose:
         print("saved video to {}".format(save_path))

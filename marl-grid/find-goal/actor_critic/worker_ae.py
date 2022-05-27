@@ -5,9 +5,10 @@ from collections import deque
 import numpy as np
 import torch
 import torch.multiprocessing as mp
+import torch.nn as nn
 import torch.nn.functional as F
-from loss import jpr_loss, mlm_loss, policy_gradient_loss
-from model.model_utils import JointPredReprModule
+from kornia.augmentation import RandomCrop
+from loss import jpr_loss, policy_gradient_loss
 from util import ops
 from util.decorator import within_cuda_device
 from util.misc import check_done
@@ -107,16 +108,6 @@ class WorkerAE(mp.Process):
         self.log_queue = log_queue
         self.env_action_size = env.action_space[0].n
         self.obs_keys = list(env.observation_space.spaces.keys())
-        # self.jpr_net = JointPredReprModule(
-        #     input_processor=net.input_processor,
-        #     feat_dim=128,
-        #     num_agents=env.num_agents,
-        #     obs_space=env.observation_space,
-        #     act_space=env.action_space,
-        #     jpr_bsz=jpr_bsz,
-        #     jpr_length=jpr_length,
-        #     jpr_agents=self.jpr_agents,
-        # ).cuda()
 
     @within_cuda_device
     def get_trajectory(self, hidden_state, state_var, done):
@@ -142,7 +133,7 @@ class WorkerAE(mp.Process):
 
         while not check_done(done) and len(trajectory[0]) < self.t_max:
             plogit, value, hidden_state, comm_out, comm_ae_loss = self.net(
-                state_var, hidden_state, env_mask_idx=env_mask_idx
+                self.transform(state_var), hidden_state, env_mask_idx=env_mask_idx
             )
             action, _, _, all_actions = self.net.take_action(plogit, comm_out)
             state, reward, done, info = self.env.step(all_actions)
@@ -218,7 +209,7 @@ class WorkerAE(mp.Process):
         else:
             with torch.no_grad():
                 target_value = self.net(
-                    state_var, hidden_state, env_mask_idx=env_mask_idx
+                    self.transform(state_var), hidden_state, env_mask_idx=env_mask_idx
                 )[1]
                 if self.num_acts == 1:
                     target_value = [target_value]
@@ -234,6 +225,19 @@ class WorkerAE(mp.Process):
                 values[aid][k].reverse()
 
         return trajectory, values, target_value, done
+
+    @torch.no_grad()
+    @within_cuda_device
+    def transform(self, state_var):
+        if not hasattr(self, "transform_op"):
+            self.transform_op = nn.Sequential(
+                nn.ReplicationPad2d(2),
+                RandomCrop(state_var["agent_0"]["pov"].shape[-2:]),
+            )
+        if self.attention_net:
+            for agent in self.agents:
+                state_var[agent]["pov"] = self.transform_op(state_var[agent]["pov"])
+        return state_var
 
     @within_cuda_device
     def run(self):
@@ -356,6 +360,10 @@ class WorkerAE(mp.Process):
                     all_vls[aid].append(np.mean(vls))
                     all_els[aid].append(np.mean(els))
 
+            # accumulate gradient locally
+            loss.backward()
+            self.master.apply_gradients(self.net)
+
             # auxilary task
             if self.add_auxiliary_loss:
                 idxs = np.random.randint(
@@ -387,6 +395,8 @@ class WorkerAE(mp.Process):
                 aux_loss = self.aux_loss_k * jpr_loss(
                     self.attention_net, temporal_samples
                 )
+                aux_loss.backward()
+                self.master.apply_aux_gradients(self.attention_net)
 
             # if self.mlm_encoded:
             #     idxs = np.random.randint(
@@ -430,14 +440,6 @@ class WorkerAE(mp.Process):
             #                 .float()
             #             )
 
-            # accumulate gradient locally
-            loss.backward()
-            self.master.apply_gradients(self.net)
-
-            if self.add_auxiliary_loss:
-                aux_loss.backward()
-                self.master.apply_aux_gradients(self.attention_net)
-
             # log training info to tensorboard
             if self.worker_id == 0:
                 log_dict = {}
@@ -475,8 +477,13 @@ class WorkerAE(mp.Process):
                 if self.add_auxiliary_loss
                 else np.nan,
             )
+
             self.master.increment(progress_str)
             self.master.momentum_update()
 
-        print(f"worker {self.worker_id} is done.")
+        if self.log_queue:
+            self.log_queue.put(f"worker {self.worker_id} is done.")
+        else:
+            print(f"worker {self.worker_id} is done.")
+
         return

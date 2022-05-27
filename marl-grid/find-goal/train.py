@@ -9,13 +9,7 @@ import torch
 import torch.multiprocessing as mp
 from actor_critic import Evaluator, Master, Worker, WorkerAE
 from envs.environments import make_environment
-from model import (
-    AENetwork,
-    AttentionModule,
-    HardSharedNetwork,
-    JointPredReprModule,
-    RichSharedNetwork,
-)
+from model import AENetwork, HardSharedNetwork, JointPredReprModule, RichSharedNetwork
 from omegaconf import DictConfig, OmegaConf
 from util.misc import check_config, set_config, set_seed_everywhere
 from util.shared_opt import SharedAdam
@@ -85,22 +79,25 @@ def main(cfg: DictConfig):
     # hogwild-style update will be applied to the master weight.
     master_lock = mp.Lock()
     net.share_memory()
-    params = list(net.parameters())
+    opt = SharedAdam(net.parameters(), lr=cfg.lr)
+
     if cfg.add_auxiliary_loss:
         attention_net = JointPredReprModule(
             input_processor=net.input_processor,
-            feat_dim=net.comm_ae.preprocessor.feat_dim if "ae" in cfg.algo else 288,
+            feat_dim=net.comm_ae.preprocessor.feat_dim
+            if "ae" in cfg.algo
+            else net.input_processor.feat_dim,
             num_agents=cfg.env_cfg.num_agents,
             obs_space=env.observation_space,
             act_space=env.action_space,
+            num_attn_layers=cfg.num_attn_layers,
+            num_attn_heads=cfg.num_attn_heads,
             jpr_bsz=cfg.aux_bsz,
             jpr_length=cfg.aux_length,
             jpr_agents=cfg.aux_agents,
         )
         attention_net.share_memory()
         aux_opt = SharedAdam(attention_net.parameters(), lr=cfg.aux_lr)
-
-    opt = SharedAdam(net.parameters(), lr=cfg.lr)
 
     if cfg.resume_path:
         ckpt = torch.load(cfg.resume_path)
@@ -140,6 +137,7 @@ def main(cfg: DictConfig):
             config=OmegaConf.to_object(cfg),
             notes=cfg.get("wandb_notes", None),
         )
+        master.log_queue = wandb_logger.log_queue
         wandb_logger.start()
 
     # (3) create workers
@@ -171,7 +169,7 @@ def main(cfg: DictConfig):
                     aux_bsz=cfg.aux_bsz,
                     aux_length=cfg.aux_length,
                     aux_loss_k=cfg.aux_loss_k,
-                    log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
+                    log_queue=master.log_queue,
                 ),
             ]
 
@@ -190,7 +188,7 @@ def main(cfg: DictConfig):
             ckpt_save_freq=cfg.ckpt_save_freq,
             num_eval_episodes=cfg.num_eval_episodes,
             net_type="ae" if "ae" in cfg.algo else "",
-            log_queue=wandb_logger.log_queue if cfg.use_wandb else None,
+            log_queue=master.log_queue,
         )
         workers.append(evaluator)
 

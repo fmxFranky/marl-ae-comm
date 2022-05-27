@@ -28,10 +28,10 @@ python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='fc' gpu=[0]
 python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='' gpu=[0]
 
 # ae-comm with auxilary task
-python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='' mlm_encoded=true gpu=[0]
+python train.py -num_workers=4 env_cfg.comm_len=10 ae_type='' add_auxiliary_loss=true gpu=[0]
 ```
 
-Videos, tensorboard logs, and checkpoints generated during training are saved in `./outputs/${%Y-%m-%d}/${%H-%M-%S}` by default.
+Videos, tensorboard logs, and checkpoints generated during training are saved in `./runs/${env}/${exp_name}` by default.
 
 ## Code layout
 

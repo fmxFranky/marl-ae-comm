@@ -3,7 +3,7 @@ target:
   service: amlk8s
   # run "amlt target list amlk8s" to list the names of available AMLK8s targets
   # run "amlt target info" to list the names of available AMLK8s targets
-  name: itpscusv100cl #itpscusv100cl # #itpscusv100cl #itpeusp40cl #itpseasiav100cl #itpscusv100cl #
+  name: itpeusp100cl #itpeusp100cl #itpeusp40cl #itpeusp40cl #itpseasiav100cl #itpscusv100cl #
   vc: resrchvc
 
 environment:
@@ -21,20 +21,16 @@ code:
 
 search:
   job_template:
-    name: marlcomm_{auto:s}
+    name: marlcomm_jpr_{auto:s}
     sku: G4
-    aml_mpirun:
-      process_count_per_node: 0
+    process_count_per_node: 0
     command:
       - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
         num_workers=16 seed={seed} algo=ae-comm
         use_wandb=true wandb_project_name=marl-jpr-comm
-        add_auxiliary_loss=true aux_loss_k={aux_loss_k} aux_length={aux_length}
-      - python ./marl-grid/find-goal/train.py gpu=[0,1,2,3]
-        num_workers=16 seed={seed} algo=ae-comm
-        use_wandb=true wandb_project_name=marl-jpr-comm
-        add_auxiliary_loss=true aux_agents=1
-        aux_loss_k={aux_loss_k} aux_length={aux_length}
+        add_auxiliary_loss=true aux_loss_k=1.0 aux_length=16 aux_bsz=128
+        aux_lr={aux_lr}
+        +wandb_notes="ablation for L=16 with 2 attn layers"
     submit_args:
       env:
         AMLT_NO_TENSORBOARD_PATCHING: true
@@ -47,11 +43,9 @@ search:
   params:
     - name: seed
       spec: discrete
-      values: [1, 2, 3, 4]
-    - name: aux_loss_k
+      values: [1, 2, 3, 4, 5]
+    - name: aux_lr
       spec: discrete
-      values: [0.1, 0.5, 1.0, 5.0]
-    - name: aux_length
-      spec: discrete
-      values: [8, 16]
+      values: [0.00005, 0.0001]
+
 

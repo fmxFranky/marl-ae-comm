@@ -66,15 +66,16 @@ comm_vf: false
 
 # auxilary task
 aux_agents: ${env_cfg.num_agents}
-aux_bsz: 64
+aux_bsz: 128
 add_auxiliary_loss: true
-aux_length: 8
+aux_length: 16
 aux_loss_k: 1.0
-aux_ratio: 0.25
 aux_rb_size: 100000
-momentum_update_freq: 4
+num_attn_heads: 8
+num_attn_layers: 2
+momentum_update_freq: 2
 momentum_tau: 0.05
-aux_lr: 0.00001
+aux_lr: 0.00005
 
 # eval configs
 video_save_freq: 20
@@ -93,4 +94,4 @@ seed: 1
 num_workers: 4
 run_dir: ./runs
 use_wandb: false
-wandb_project_name: marl-ae-comm
+wandb_project_name: marl-ae-jpr-comm

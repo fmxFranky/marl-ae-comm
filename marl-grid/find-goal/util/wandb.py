@@ -21,9 +21,11 @@ class WandbLoggingProcess(mp.Process):
         #     include_fn=lambda path: path.endswith(".py"),
         # )
         while True:
-            log_dict = self.log_queue.get(block=True)
-            if isinstance(log_dict, dict):
-                wandb.log(log_dict)
+            log_info = self.log_queue.get(block=True)
+            if isinstance(log_info, dict):
+                wandb.log(log_info)
+            elif isinstance(log_info, str):
+                print(log_info)
             else:
                 break
         # base_path = "/".join(self.save_dir_fmt.split("/")[:-1])
