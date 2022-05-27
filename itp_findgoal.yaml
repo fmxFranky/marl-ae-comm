@@ -29,8 +29,7 @@ search:
         num_workers=16 seed={seed} algo=ae-comm
         use_wandb=true wandb_project_name=marl-jpr-comm
         add_auxiliary_loss=true aux_loss_k=1.0 aux_length=16 aux_bsz=128
-        aux_lr={aux_lr}
-        +wandb_notes="ablation for L=16 with 2 attn layers"
+        aux_lr={aux_lr} wandb_notes="ablation for L=16 with 2 attn layers"
     submit_args:
       env:
         AMLT_NO_TENSORBOARD_PATCHING: true

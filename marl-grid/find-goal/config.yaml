@@ -72,7 +72,7 @@ aux_length: 16
 aux_loss_k: 1.0
 aux_rb_size: 100000
 num_attn_heads: 8
-num_attn_layers: 2
+num_attn_layers: 4
 momentum_update_freq: 2
 momentum_tau: 0.05
 aux_lr: 0.00005
@@ -95,3 +95,4 @@ num_workers: 4
 run_dir: ./runs
 use_wandb: false
 wandb_project_name: marl-ae-jpr-comm
+wandb_notes: null
