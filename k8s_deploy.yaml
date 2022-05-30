@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mxfeng-deploy-000
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      mxfeng: deploy-000
+  template:
+    metadata:
+      labels: 
+        mxfeng: deploy-000
+    spec:
+      containers:
+      - name: pod-000
+        # image: mcc.ustc.com/library/yaoxin/python3.8-cuda11.3:torch1.11-v2
+        image: mcc.ustc.com/library/mxfeng/deep_rl:marl_comm
+        resources:
+          requests:
+            cpu: 40
+            memory: 450Gi
+          limits:
+            cpu: 40
+            memory: 450Gi
+            nvidia.com/gpu: 4
+        command: ["/bin/bash","-c"]
+        args:
+        - cd /data/mxfeng/marl-ae-comm && bash ./run.sh
+        volumeMounts:
+        - name: data-0
+          mountPath: /data/mxfeng
+        - name: shm-cache
+          mountPath: /dev/shm
+      volumes:
+      - name: data-0
+        nfs:
+          path: /NAS_DATA/NAS_DATA/mxfeng
+          server: 169.252.198.3
+      - name: shm-cache
+        emptyDir:
+          medium: Memory

@@ -75,12 +75,12 @@ num_attn_heads: 8
 num_attn_layers: 4
 momentum_update_freq: 2
 momentum_tau: 0.05
-aux_lr: 0.00005
+aux_lr: 0.00001
 
 # eval configs
-video_save_freq: 20
+video_save_freq: 100
 ckpt_save_freq: 100
-num_eval_episodes: 10
+num_eval_episodes: 100
 num_eval_videos: 10
 eval_ae: false
 
@@ -90,7 +90,7 @@ gpu:
   - 0
 id: ""
 exp_name: null
-seed: 1
+seed: null
 num_workers: 4
 run_dir: ./runs
 use_wandb: false

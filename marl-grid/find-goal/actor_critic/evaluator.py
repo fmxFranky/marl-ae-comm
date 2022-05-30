@@ -204,16 +204,22 @@ class Evaluator(mp.Process):
                     log_dict["timeout"] += 1
 
             # average logged info
+            eval_str = f"[{weight_iter}/{self.master.max_iteration}] "
             for k, v in log_dict.items():
                 self.master.writer.add_scalar(
                     k, v / self.num_eval_episodes, weight_iter
                 )
+                eval_str += f"{k}: {v/self.num_eval_episodes:.2f} "
+            eval_str += f"({self.num_eval_episodes} episodes)"
 
             if self.log_queue:
                 for k, v in log_dict.items():
                     new_log_dict[k] = v / self.num_eval_episodes
                 new_log_dict["eval_weight_iter"] = weight_iter
                 self.log_queue.put(new_log_dict)
+                self.log_queue.put(eval_str)
+            else:
+                print(eval_str)
 
             # save weights
             self.master.save_ckpt(
