@@ -68,14 +68,15 @@ comm_vf: false
 aux_agents: ${env_cfg.num_agents}
 aux_bsz: 128
 add_auxiliary_loss: true
-aux_length: 16
+aux_length: 4
 aux_loss_k: 1.0
 aux_rb_size: 100000
 num_attn_heads: 8
-num_attn_layers: 4
+num_attn_layers: 2
 momentum_update_freq: 2
 momentum_tau: 0.05
 aux_lr: 0.00001
+aux_pred_only_latest_latent: true
 
 # eval configs
 video_save_freq: 100
@@ -88,11 +89,18 @@ eval_ae: false
 algo: ae-comm # ['no-comm', 'rl-comm', 'ae-rl-comm', 'ae-comm']
 gpu:
   - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
 id: ""
 exp_name: null
 seed: null
-num_workers: 4
+num_workers: null
 run_dir: ./runs
 use_wandb: false
-wandb_project_name: marl-ae-jpr-comm
+wandb_project_name: marl-jpr-comm
 wandb_notes: null

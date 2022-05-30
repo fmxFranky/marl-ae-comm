@@ -44,8 +44,11 @@ def set_seed_everywhere(seed):
 def set_config(cfg):
     cfg.env_cfg.env_name = get_env_name(cfg.env_cfg)
     if cfg.seed is None:
-        cfg.env_cfg.seed = cfg.seed = random.randint(0, 2 ** 32 - 1)
+        cfg.env_cfg.seed = cfg.seed = random.randint(0, 2 ** 16 - 1)
         print("AUTO: setting seed to {}".format(cfg.seed))
+    if cfg.num_workers is None:
+        cfg.num_workers = 4 * len(cfg.gpu)
+        print("AUTO: setting num_workers to {}".format(cfg.num_workers))
 
     # automatically generate exp name based on configs
     curr_time = str(datetime.datetime.now())[:16].replace(" ", "_")

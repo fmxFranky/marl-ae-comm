@@ -57,6 +57,7 @@ class Worker(mp.Process):
         aux_rb_size=int(1e5),
         aux_length=8,
         aux_bsz=64,
+        aux_pred_only_latest_latent=False,
         log_queue=None,
         **kwargs,
     ):
@@ -86,6 +87,7 @@ class Worker(mp.Process):
         self.aux_rb_size = aux_rb_size
         self.aux_length = aux_length
         self.aux_bsz = aux_bsz
+        self.aux_pred_only_latest_latent = aux_pred_only_latest_latent
         assert aux_task in ["mlm", "jpr"]
         assert aux_agents == 1 or aux_agents == self.env.num_agents
         self.log_queue = log_queue
@@ -347,7 +349,9 @@ class Worker(mp.Process):
                         )
 
                 aux_loss = self.aux_loss_k * jpr_loss(
-                    self.attention_net, temporal_samples
+                    self.attention_net,
+                    temporal_samples,
+                    pred_only_latest_latent=self.aux_pred_only_latest_latent,
                 )
                 aux_loss.backward()
                 self.master.apply_aux_gradients(self.attention_net)

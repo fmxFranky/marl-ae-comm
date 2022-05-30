@@ -16,7 +16,7 @@ from util.shared_opt import SharedAdam
 from util.wandb import WandbLoggingProcess
 
 
-@hydra.main(config_name="config", config_path=".")
+@hydra.main(config_name="config", config_path=".", version_base="1.2")
 def main(cfg: DictConfig):
     check_config(cfg)
     set_config(cfg)
@@ -169,6 +169,7 @@ def main(cfg: DictConfig):
                     aux_bsz=cfg.aux_bsz,
                     aux_length=cfg.aux_length,
                     aux_loss_k=cfg.aux_loss_k,
+                    aux_pred_only_latest_latent=cfg.aux_pred_only_latest_latent,
                     log_queue=master.log_queue,
                 ),
             ]

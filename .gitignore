@@ -7,3 +7,4 @@ amlt/
 .amltignore
 .vscode
 outputs/
+multirun/
